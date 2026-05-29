@@ -1,165 +1,154 @@
 # Next Steps
 
-Ordered by priority. Cross items off as completed. Add new tasks as they
-emerge. Keep this in sync with reality — it's the source of truth for
-"what should I work on right now?"
+Ordered by priority. Cross items off as completed. Keep this in sync with
+reality — it's the source of truth for "what should I work on right now?"
+Methodology is locked in `README.md`.
 
-## Phase 0: De-risk the pipeline (a few hours)
+## Phase 0: De-risk the pipeline — DONE
 
-These are the things that, if broken, will silently corrupt every result
-that follows. Do them before scaling up.
+- [x] **Verify state persistence in BFCL executor.** Instances cached in the
+  `multi_turn_utils` module globals, keyed `{model}_{task_id}_{class}_instance`;
+  reused across calls within a process. `is_evaL_run=True` appends `_eval` so
+  grading uses separate instances. (Caveat → Phase 0.5: keys have no run/trial
+  number and are never cleared.)
+- [x] **Verify `is_evaL_run`** — capital-L confirmed; our call-site is correct.
+- [x] **Broaden retry exceptions** — `utils/retry.py`.
+- [x] **Add full trajectory logging** — `utils/logging.py` (`TrajectoryLogger`).
+- [x] **Fix schema conversion** — recursive `dict→object`, `float→number` in
+  `utils/schema.py::_normalize_schema()`.
+- [x] **Run baseline end-to-end** — `run_benchmark.py` grades a 5-task sample.
 
-- [x] **Verify state persistence in BFCL executor.**
-  Confirmed by reading source (`multi_turn_utils.py:47-58`).
-  `execute_multi_turn_func_call` stores instances in `globals()` keyed as
-  `{model}_{task_id}_{class}_instance`.  On first call it creates and
-  configures the instance; on subsequent calls it reuses it — state IS
-  preserved across tool calls within the same process.
-  `multi_turn_checker` passes `is_evaL_run=True` which appends `_eval` to
-  the key, so grading uses a completely separate instance.  No refactoring
-  needed; no state contamination between live run and grading.
+## Phase 0.5: Correctness fixes — DONE
 
-- [x] **Verify the `is_evaL_run` parameter.**
-  Confirmed capital-L in `multi_turn_utils.py:31`.
-  Our call-site `is_evaL_run=False` is correct.
+Found in the design review (`REVIEW.md`); each silently corrupts a result if
+skipped. All wired into the shared loop / runner and verified on one live task
+per affected category.
 
-- [x] **Broaden retry exceptions.**
-  `utils/retry.py` now catches `APIError`, `APIConnectionError`,
-  `APITimeoutError`, `RateLimitError`, `httpx.ReadTimeout`,
-  `httpx.ConnectTimeout`, `httpx.RemoteProtocolError`.
-  All architectures share this via `from utils.retry import call_with_retry`.
+- [x] **Reset simulator instances between runs/tasks** (`REVIEW.md §1`).
+  `utils/executor.py::reset_bfcl_instances()` (deletes `*_instance` keys from
+  `multi_turn_utils.__dict__`), called at the top of every task in `run_one`.
+- [x] **AND the irrelevance checker into grading** (`REVIEW.md §2`).
+  `run_benchmark.py::grade()` ANDs `multi_turn_checker` with
+  `multi_turn_irrelevance_checker`. Verified: a `miss_param` task now FAILs with
+  `irrelevance_error` (would have wrongly passed before).
+- [x] **`miss_func` held-out functions** (`REVIEW.md §2b`). The base loop strips
+  `missed_function` names from the toolset, then re-adds them + injects
+  `DEFAULT_USER_PROMPT_FOR_ADDITIONAL_FUNCTION_FC` at the holdout turn. Verified:
+  tool count 17→18 exactly at the holdout turn.
+- [x] **Thread `long_context` into live execution** (`REVIEW.md §3`).
+  `execute_call_locally(..., long_context)`; the loop derives it from the task
+  id. (The `test_category` arg to `multi_turn_checker` is now a derived string,
+  not a dead literal.)
+- [x] **Capture `error_type`** in `task_end` and the results row (not just
+  `error_message`) — the failure-mode analysis needs it.
+- [x] **Handle `finish_reason == "length"`** (`REVIEW.md §4`). `max_tokens=2048`;
+  truncation logged; tool-call JSON parsing is guarded (stubs unanswered
+  `tool_call`s so the next request stays valid) instead of crashing.
+- [x] **`MAX_STEPS_PER_TURN = 30`, cap-hits logged** (`max_steps_reached` event +
+  `max_steps_hits` stat). Confirm hit-rate ≈ 0 in the pilot.
+- [x] **Don't retry 4xx** (`REVIEW.md §4`). `utils/retry.py` re-raises 4xx
+  (except 429) instead of backing off on a request that can't succeed.
 
-- [x] **Add full trajectory logging.**
-  `utils/logging.py` provides `TrajectoryLogger` context manager.
-  Writes JSONL to `logs/{architecture}/{task_id}.jsonl`.
-  Structured events: task_start, user_turn, llm_request, llm_response,
-  tool_call, tool_result, turn_end, task_end (+ free-form `event()` for
-  reflection steps).  `run_one_bfcl_task.py` updated to use it.
+## Phase 1: Baseline + harness scaffolding
 
-- [x] **Fix schema conversion bug (found during Phase 0 analysis).**
-  `bfcl_schema_to_openai` only converted top-level `"dict"→"object"`.
-  Bugs: (1) nested `dict` properties (e.g. `edit_ticket.updates`) not
-  converted; (2) `"float"` is not a valid JSON Schema type — must be
-  `"number"` (42 occurrences across all doc files).
-  Fixed in `utils/schema.py` with a recursive `_normalize_schema()`.
-  All 129 tool schemas across all 8 simulator classes now pass cleanly.
+- [x] **Refactor the harness for comparability** (`REVIEW.md §6`/`§7`).
+    - Shared FC loop lives once in `architectures/architecture.py::Architecture`;
+      subclasses (`baseline.py`, `react.py`) only set `name` + `system_prompt`.
+    - No printing in `run_task` — it returns `(calls, stats)`; the runner renders
+      via `utils/logging.py::pretty_print_log`.
+    - Architecture registry + argparse (`--arch --category --sample --limit
+    --seed --make-subset`); architecture instantiated **once** outside the loop.
+    - Results table `results/{arch}/{category}.jsonl` with cost fields
+      (`n_llm_calls`, `n_tool_calls`, `input/output_tokens`, `peak_context`,
+      `latency_s`, `max_steps_hits`) + `error_type`. (Per-run manifest dropped by
+      decision — provenance via git if results are committed.)
+- [x] **Freeze the task subset.** `python run_benchmark.py --make-subset` →
+  `task_subset.json` (50/category, stratified by `involved_classes`, seed 42,
+  verified 50 unique each). `utils/sampling.py`.
+- [ ] **Run the FC baseline over the full 200-task subset.** First real result.
+- [ ] **Baseline noise re-run.** Run the baseline a second time over the subset
+  (instances reset between passes); report the task-level flip rate as the
+  noise band. (This is the only repeat — no `pass^k`.)
 
-## Phase 1: Scale the baseline (1-2 days)
+## Phase 2: ReAct
 
-- [ ] **Run the FC baseline on 5 tasks** from `multi_turn_base` to confirm
-  the pipeline is stable. Print pass/fail per task and aggregate.
+- [x] **Base `Architecture` abstraction** — done as part of Phase 1
+  (`architecture.py`; `react.py`). Architectures vary only in system prompt
+  (loop hooks to be added for Reflexion/REBACT).
+- [x] **Implement ReAct** — zero-shot `Thought:` before each action via the
+  shared loop; action through native FC. No exemplars. (`architectures/react.py`)
+- [ ] **Run ReAct over the subset**; paired comparison vs baseline per category.
 
-- [ ] **Add task-iteration loop.**
-  Refactor `run_one_bfcl_task.py` → `run_baseline.py` that loops over a
-  configurable list of task IDs and emits a summary CSV: task_id, passed,
-  num_steps, total_tokens, elapsed_seconds.
+## Phase 3: Reflexion (episodic)
 
-- [ ] **Pick the 20-30 task subset per category.**
-  Don't run on all 1000 tasks. Pick a fixed subset, document the
-  selection method (random with fixed seed, or curated by length/difficulty).
-  Save the list as `task_subsets.json` so all architectures evaluate on
-  the exact same tasks.
+- [ ] **Within-task multi-attempt loop**, `k=3`. On a failed attempt: reflect
+  (one LLM call), prepend reflection, retry. Attempt-1 prompt **identical to
+  baseline** so Reflexion@1 == baseline by construction.
+- [ ] **Sanitize the failure signal.** Feed back only which instance/attribute
+  mismatched (or binary fail) — **never** the grader's expected value (it leaks
+  ground truth). Note the oracle asymmetry explicitly.
+- [ ] **Fix the reflection prompt format** (e.g. `What I tried / What went wrong
+  / Lesson`); reuse for the vector-DB variant.
+- [ ] **Report Reflexion@1 and Reflexion@k.** @1→@k gap = value of reflection.
 
-- [ ] **Run FC baseline on full subset** (4 categories × 20-30 tasks).
-  This is the first real result. Save the summary CSV.
+## Phase 4: Reflexion (vector DB) — main contribution
 
-## Phase 2: ReAct architecture (2-3 days)
+- [ ] **Local persistent vector store** (Chroma or FAISS) at `./reflections.db`.
+- [ ] **Wire Octen embedder.** Embed `task_description + reflection_text`; store
+  with metadata (task_id, category, success flag).
+- [ ] **Single attempt per task + retrieve top-k (k=3) past reflections**,
+  injected as "lessons from similar past tasks". (Single attempt keeps the
+  contribution clean: the only new variable vs episodic@1 is persistent memory.)
+- [ ] **Fixed task order; plot the learning curve** (pass rate vs. position as
+  the DB fills).
+- [ ] **Compare to episodic Reflexion@1** — does persistent memory beat
+  episodic, and where?
 
-- [ ] **Factor architecture into a clean abstraction.**
-  Define `class Architecture` with `run_task(task) -> calls_per_turn`.
-  Both FC baseline and ReAct inherit from this. Different architectures
-  vary only in: system prompt, optional pre/post-step hooks, optional
-  reflection logic.
+## Phase 5: REBACT
 
-- [ ] **Implement ReAct.**
-  System prompt instructs explicit `Thought:` reasoning before each
-  action. Action still uses native function calling — we're testing the
-  *thought injection*, not the *action format*. Output should look like:
-  `Thought: ... \n [tool_call via native FC]`
+- [ ] **Reflect step after each tool result**: one LLM call → CONTINUE or
+  MODIFY `<revised_call>`.
+- [ ] **State rewind on MODIFY** (decided primary): rebuild the simulator from
+  initial config + replay kept calls, **and edit the recorded call list** to
+  drop the retracted call (the grader replays the recorded list, so live state
+  and record must stay in lockstep — `CLAUDE.md → REBACT rewind`).
+- [ ] **Run over the subset.** Document the rewind-vs-real-deployment caveat.
 
-- [ ] **Run ReAct on the full subset.** Compare to FC baseline,
-  per-category.
+## Phase 6: Analysis & report
 
-## Phase 3: Reflexion (episodic) (2-3 days)
-
-- [ ] **Implement single-task multi-attempt loop.**
-  If trajectory fails state check, generate reflection (one LLM call),
-  prepend reflection to the next attempt's system prompt, retry. Cap at
-  k=3 attempts.
-
-- [ ] **Decide reflection prompt format.**
-  Suggested: structured (`What I tried / What went wrong / Lesson`). Fix
-  this once and reuse for vector DB variant.
-
-- [ ] **Report both Reflexion@1 and Reflexion@3.**
-  @1 is directly comparable to ReAct@1. @3 is the gain from the
-  reflection mechanism.
-
-## Phase 4: Reflexion (vector DB) — the main contribution (3-5 days)
-
-- [ ] **Set up local vector store.**
-  Chroma or FAISS, persistent on disk at `./reflections.db`.
-
-- [ ] **Wire Octen embedder.**
-  Embed `task_description + reflection_text` (both, concatenated). Store
-  with metadata: task_id, task_category, success_after_k_attempts.
-
-- [ ] **Retrieve top-k on new task.**
-  Query embedding = new task's description. k=3 to start. Inject
-  retrieved reflections as system-prompt context: "Lessons from past
-  similar tasks: ..."
-
-- [ ] **Run with cold-start ordering.**
-  Don't randomize task order — run tasks in fixed sequence so the DB
-  grows naturally. Plot accuracy vs DB size to show the learning curve.
-
-- [ ] **Compare to Reflexion-episodic.**
-  Main empirical question: does persistent memory beat episodic? Where?
-
-## Phase 5: REBACT (2-3 days)
-
-- [ ] **Implement reflect step between observation and next action.**
-  After each tool result, one extra LLM call: "Was that action right?
-  CONTINUE or MODIFY <revised_call>." If MODIFY, replace last action
-  (Option A: only for read-only tools; Option B: rewind simulator state).
-
-- [ ] **Start with Option A.** Run on full subset.
-
-- [ ] **If time: also run Option B** as upper-bound comparison.
-
-## Phase 6: Analysis and report (1-2 weeks)
-
-- [ ] **Aggregate results table.**
-  Architecture × Category × (pass@1, pass^3). One main table for the report.
-
-- [ ] **Qualitative failure analysis.**
-  Pick 2-3 failed trajectories per architecture. Categorize each by the
-  five failure modes. Look for patterns: which architecture fails how?
-
-- [ ] **Plot DB size vs accuracy** for vector-DB Reflexion.
-
-- [ ] **Write report.** Structure:
-  1. Intro and taxonomy (1.5 p)
-  2. Architectures under study (2 p)
-  3. Benchmark and methodology (1 p)
-  4. Results (2 p)
-  5. Qualitative analysis (1.5 p)
-  6. Discussion and limitations (1 p)
+- [ ] **Aggregate results table.** Architecture × Category × **pass rate**
+  (single run; + noise band). Paired tests (McNemar / bootstrap) for
+  architecture differences; report CIs.
+- [ ] **Cost analysis.** Tokens / LLM calls / peak context / latency per
+  architecture; pass-rate-vs-cost. How each architecture grows the context.
+- [ ] **Qualitative failure analysis.** 2–3 failed trajectories per
+  architecture, tagged by the five failure modes using **operational
+  definitions** (auto-detect what you can from the logs; rubric for the rest).
+  Cite the emergentmind taxonomy.
+- [ ] **Vector-DB learning curve plot.**
+- [ ] **Write report.** 1 Intro+taxonomy · 2 Architectures · 3 Benchmark &
+  methodology · 4 Results · 5 Qualitative analysis · 6 Discussion & limitations
+  (incl. single-model external validity + REBACT rewind caveat).
 
 ## Stretch / nice-to-have
 
-- [ ] Run one or two τ-bench tasks as a "what happens on harder problems?"
-  appendix. Frame as illustrative, not statistically meaningful.
-- [ ] Test with a second model (e.g., `qwen35-397b`) on a small subset to
-  show architectural ordering is robust across models.
-- [ ] Combine REBACT + Reflexion-vector: in-trajectory and cross-trajectory
-  reflection together. Probably out of scope, but interesting.
+- [ ] Second model (e.g. `qwen35-397b`) on a small subset to show the
+  architectural ordering is robust across models.
+- [ ] One or two τ-bench tasks as an illustrative "harder problems" appendix.
+- [ ] Trajectory pretty-printer (jsonl → readable markdown) for the qualitative
+  pass.
+- [ ] Combine REBACT + Reflexion-vector (in-trajectory + cross-trajectory).
+  Probably out of scope.
 
 ## What NOT to do
 
-- Don't extend to τ-bench full scale (cost + complexity).
+- No `pass^k` / repeated trials (other than the single baseline noise re-run).
+- No `composite` category — absent at tag `v1.3`.
+- Don't extend to τ-bench full scale.
 - Don't switch models mid-project — fixed model is essential for clean
   comparison.
-- Don't implement CoT or ToT on BFCL (they can't act; not meaningful).
-- Don't try to fix REBACT's irreversibility limitation with elaborate
-  state-rollback mechanisms; just document it as a limitation.
+- Don't implement CoT/ToT on BFCL (they can't act; not meaningful here).
+- Don't add context-window management (summarization/truncation) — measure
+  growth, don't manage it; managing it is another confound.
+- No few-shot exemplars in any architecture; don't parse actions from text
+  (native FC only). These are fairness invariants, not preferences.

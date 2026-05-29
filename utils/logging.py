@@ -181,11 +181,19 @@ class TrajectoryLogger:
     def turn_end(self, turn_idx: int, n_steps: int) -> None:
         self._write("turn_end", turn_idx=turn_idx, n_steps=n_steps)
 
-    def task_end(self, passed: bool, error_message: str | None = None) -> None:
+    def task_end(
+        self,
+        passed: bool,
+        error_message: str | None = None,
+        error_type: str | None = None,
+        stats: dict | None = None,
+    ) -> None:
         self._write(
             "task_end",
             result="pass" if passed else "fail",
             error_message=error_message,
+            error_type=error_type,  # e.g. multi_turn:instance_state_mismatch
+            stats=stats or {},
             elapsed_s=round(time.monotonic() - self._start, 3),
         )
 
@@ -208,3 +216,33 @@ class TrajectoryLogger:
             self._write("task_end", result="error", error=str(exc_val))
         self.close()
         return False  # don't suppress exceptions
+
+
+def pretty_print_log(path, printer=print) -> None:
+    """
+    Render a trajectory JSONL (written by `TrajectoryLogger`) as readable text.
+
+    Single source of truth for console output: architectures only *log*; the
+    runner calls this to print. Also handy for eyeballing failures during the
+    qualitative analysis.
+    """
+    with open(path, encoding="utf-8") as fh:
+        events = [json.loads(line) for line in fh if line.strip()]
+
+    for ev in events:
+        t = ev["type"]
+        if t == "user_turn":
+            for m in ev.get("messages", []):
+                printer(f"\n--- Turn {ev['turn_idx'] + 1} ---")
+                printer(f"[user] {m.get('content')}")
+        elif t == "llm_response" and ev.get("content"):
+            # Reasoning / final answer text the model produced.
+            printer(f"[assistant] {ev['content']}")
+        elif t == "tool_call":
+            printer(f"[tool_call] {ev['call_str']}")
+        elif t == "tool_result":
+            printer(f"[tool_result] {ev['result']}")
+        elif t == "reflection":
+            printer(f"[reflection] {ev.get('text', '')}")
+        elif t == "max_steps_reached":
+            printer(f"⚠ MAX_STEPS_PER_TURN reached on turn {ev['turn_idx'] + 1}")
