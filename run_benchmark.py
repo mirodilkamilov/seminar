@@ -14,6 +14,7 @@ Examples
     python run_benchmark.py --arch baseline --sample 5   # quick smoke (no frozen subset)
     python run_benchmark.py --arch baseline --tag run2   # noise re-run (separate output)
 """
+
 import argparse
 import json
 from pathlib import Path
@@ -24,6 +25,7 @@ from bfcl_eval.eval_checker.multi_turn_eval.multi_turn_checker import (
     multi_turn_checker,
     multi_turn_irrelevance_checker,
 )
+from results_to_csv import main as build_csv
 from utils.config import CATEGORIES, MODEL, task_paths
 from utils.executor import reset_bfcl_instances
 from utils.logging import TrajectoryLogger, pretty_print_log
@@ -159,6 +161,10 @@ def main():
     for cat, (n_pass, total) in summary.items():
         rate = n_pass / total if total else 0.0
         print(f"  {cat:<14} {n_pass}/{total}  ({rate:.0%})")
+
+    # Regenerate the analysis CSVs from the just-written JSONL (source of truth).
+    print(f"\n{'#' * 70}\nResults CSVs\n{'#' * 70}")
+    build_csv()
 
 
 if __name__ == "__main__":
