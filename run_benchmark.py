@@ -13,6 +13,7 @@ Examples
     python run_benchmark.py --arch react --category base
     python run_benchmark.py --arch baseline --sample 5   # quick smoke (no frozen subset)
     python run_benchmark.py --arch baseline --tag run2   # noise re-run (separate output)
+    python run_benchmark.py --task-id multi_turn_base_90 # re-run one task, merge its row
 """
 
 import argparse
@@ -67,7 +68,8 @@ def grade(model_calls, answer, task, category):
     return True, None, None
 
 
-def run_one(arch, task, answer, category, results_fh, label):
+def run_one(arch, task, answer, category, label):
+    """Run + grade one task. Returns (passed, result_row); the caller persists."""
     print(f"\n{'=' * 70}\nRunning task: {task['id']}  ({label})")
     print(f"Involved classes: {task['involved_classes']} | "
           f"turns: {len(task['question'])}\n{'=' * 70}")
@@ -92,7 +94,7 @@ def run_one(arch, task, answer, category, results_fh, label):
     print("✓ PASS" if passed else f"✗ FAIL: {error_type}: {error_message}")
     print(f"{'=' * 70}\n  Log: {tlog.path}")
 
-    results_fh.write(json.dumps({
+    row = {
         "task_id": task["id"],
         "category": category,
         "passed": passed,
@@ -100,9 +102,34 @@ def run_one(arch, task, answer, category, results_fh, label):
         "error_message": error_message,
         "n_turns": len(task["question"]),
         **stats,
-    }) + "\n")
-    results_fh.flush()
-    return passed
+    }
+    return passed, row
+
+
+def task_to_category(task_id):
+    """Map a task id (multi_turn_<category>_<n>) to its category."""
+    core = task_id[len("multi_turn_"):]  # strip the multi_turn_ prefix
+    category = core.rsplit("_", 1)[0]  # drop the trailing _<n>
+    if category not in CATEGORIES:
+        raise ValueError(
+            f"Cannot derive a known category from task id {task_id!r} "
+            f"(got {category!r}; expected one of {CATEGORIES})"
+        )
+    return category
+
+
+def merge_results(results_path, new_rows):
+    """Upsert new_rows into results_path by task_id, preserving existing rows/order."""
+    rows = load_jsonl(results_path) if results_path.exists() else []
+    by_id = {r["task_id"]: r for r in rows}
+    order = [r["task_id"] for r in rows]
+    for row in new_rows:
+        if row["task_id"] not in by_id:
+            order.append(row["task_id"])
+        by_id[row["task_id"]] = row
+    with open(results_path, "w") as fh:
+        for tid in order:
+            fh.write(json.dumps(by_id[tid]) + "\n")
 
 
 def select_tasks(category, args):
@@ -111,7 +138,12 @@ def select_tasks(category, args):
     tasks = {t["id"]: t for t in load_jsonl(task_file)}
     answers = {a["id"]: a for a in load_jsonl(answer_file)}
 
-    if args.sample is not None:  # dev/smoke: random stratified, no frozen file
+    if args.task_id:  # debug: explicit ids, ignore subset/sample/limit
+        ids = [tid for tid in args.task_id if task_to_category(tid) == category]
+        missing = [i for i in ids if i not in tasks]
+        if missing:
+            raise KeyError(f"Task id(s) not found in {category}: {missing}")
+    elif args.sample is not None:  # dev/smoke: random stratified, no frozen file
         ids = stratified_sample(list(tasks.values()), args.sample, args.seed)
     else:
         ids = load_subset()[category]
@@ -135,6 +167,11 @@ def main():
                         "re-run) don't overwrite each other.")
     p.add_argument("--make-subset", action="store_true",
                    help="Freeze task_subset.json (50/category, stratified) and exit.")
+    p.add_argument("--task-id", nargs="+", default=None,
+                   help="Run only these task id(s), e.g. --task-id multi_turn_base_90. "
+                        "Category is inferred from the id; --category/--sample are "
+                        "ignored. Results are MERGED into the existing category "
+                        "file (matching rows replaced, others kept), not truncated.")
     args = p.parse_args()
 
     if args.make_subset:
@@ -144,7 +181,10 @@ def main():
 
     arch = ARCHITECTURES[args.arch]()  # instantiate ONCE (persists across tasks)
     label = f"{arch.name}__{args.tag}" if args.tag else arch.name
-    categories = CATEGORIES if args.category == "all" else [args.category]
+    if args.task_id:  # categories implied by the explicit ids
+        categories = sorted({task_to_category(t) for t in args.task_id})
+    else:
+        categories = CATEGORIES if args.category == "all" else [args.category]
 
     out_dir = RESULTS_ROOT / label
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -153,8 +193,19 @@ def main():
     for category in categories:
         pairs = select_tasks(category, args)
         results_path = out_dir / f"{category}.jsonl"
-        with open(results_path, "w") as fh:
-            n_pass = sum(run_one(arch, t, a, category, fh, label) for t, a in pairs)
+        n_pass = 0
+        if args.task_id:  # debug: upsert each task into the existing file
+            for t, a in pairs:
+                passed, row = run_one(arch, t, a, category, label)
+                n_pass += passed
+                merge_results(results_path, [row])  # crash-safe per task
+        else:  # full run: fresh file, written + flushed per task (crash-safe)
+            with open(results_path, "w") as fh:
+                for t, a in pairs:
+                    passed, row = run_one(arch, t, a, category, label)
+                    n_pass += passed
+                    fh.write(json.dumps(row) + "\n")
+                    fh.flush()
         summary[category] = (n_pass, len(pairs))
 
     print(f"\n{'#' * 70}\nSUMMARY — {label}\n{'#' * 70}")
