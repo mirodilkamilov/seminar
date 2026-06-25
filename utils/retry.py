@@ -46,7 +46,11 @@ def call_with_retry(client, *, max_retries: int = 5, base_wait: float = 2.0, **k
         **kwargs:     Forwarded verbatim to ``chat.completions.create``.
 
     Returns:
-        The ``ChatCompletion`` object from the successful call.
+        ``(response, latency_s)`` where ``response`` is the ``ChatCompletion``
+        from the successful call and ``latency_s`` is the wall-clock time of
+        *that single successful HTTP call only* — it excludes backoff sleeps and
+        failed attempts. Time the call here (not around this function) so the
+        cost axis measures model latency, not infrastructure flakiness.
 
     4xx client errors (bad schema, auth, …) are *not* retried — only 429 and
     transient network / 5xx errors are.
@@ -56,7 +60,9 @@ def call_with_retry(client, *, max_retries: int = 5, base_wait: float = 2.0, **k
 
     for attempt in range(max_retries):
         try:
-            return client.chat.completions.create(**kwargs)
+            t0 = time.monotonic()
+            response = client.chat.completions.create(**kwargs)
+            return response, time.monotonic() - t0
         except _RETRYABLE as exc:
             # 4xx (except 429 rate limit) are client errors — retrying won't help.
             status = getattr(exc, "status_code", None)

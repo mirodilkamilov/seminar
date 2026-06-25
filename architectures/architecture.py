@@ -13,7 +13,6 @@ Fairness invariants enforced here (see README.md):
   - `temperature=0`.
 """
 import json
-import time
 from abc import ABC
 
 from utils.config import MAX_STEPS_PER_TURN, client, MODEL, DOCS_DIR
@@ -100,8 +99,8 @@ class Architecture(ABC):
 
             for step in range(MAX_STEPS_PER_TURN):
                 tlog.llm_request(turn_idx, step, MODEL, messages, active_tools)
-                t0 = time.monotonic()
-                response = call_with_retry(
+                # latency is the successful-call time only (retry backoff excluded)
+                response, latency = call_with_retry(
                     client,
                     model=MODEL,
                     messages=messages,
@@ -110,7 +109,6 @@ class Architecture(ABC):
                     temperature=0,
                     max_tokens=2048,
                 )
-                latency = time.monotonic() - t0
                 tlog.llm_response(turn_idx, step, response, latency)
 
                 # --- stats ---
