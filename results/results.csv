@@ -49,6 +49,56 @@ baseline,base,multi_turn_base_92,False,5,VehicleControlAPI,16,11,55818,918,56736
 baseline,base,multi_turn_base_94,True,3,VehicleControlAPI,16,13,57218,895,58113,4198,9.34,0,,
 baseline,base,multi_turn_base_97,True,6,MessageAPI|VehicleControlAPI,19,14,89304,1330,90634,5643,14.18,0,,
 baseline,base,multi_turn_base_98,True,3,VehicleControlAPI|MathAPI,11,8,55797,467,56264,5424,5.3,0,,
+baseline,long_context,multi_turn_long_context_1,True,4,GorillaFileSystem,13,9,42825,676,43501,3770,50.52,0,,
+baseline,long_context,multi_turn_long_context_103,True,5,MessageAPI|TradingBot,13,8,332262,3544,335806,44394,149.1,0,,
+baseline,long_context,multi_turn_long_context_111,True,4,MessageAPI|TradingBot,11,7,52220,882,53102,6120,54.16,0,,
+baseline,long_context,multi_turn_long_context_115,True,4,TradingBot,11,7,224859,1275,226134,36873,73.73,0,,
+baseline,long_context,multi_turn_long_context_117,True,6,TradingBot,14,8,452740,5492,458232,83387,244.77,0,,
+baseline,long_context,multi_turn_long_context_119,True,4,TradingBot|TicketAPI,9,5,285470,2566,288036,41987,88.95,0,,
+baseline,long_context,multi_turn_long_context_120,True,4,TradingBot,10,6,223339,780,224119,36637,35.76,0,,
+baseline,long_context,multi_turn_long_context_122,True,5,TradingBot,11,6,42414,1125,43539,5489,51.51,0,,
+baseline,long_context,multi_turn_long_context_127,True,4,TradingBot,9,5,186003,1311,187314,40500,54.94,0,,
+baseline,long_context,multi_turn_long_context_139,True,2,TwitterAPI|TradingBot,6,4,29444,2240,31684,8367,58.2,0,,
+baseline,long_context,multi_turn_long_context_140,False,4,TradingBot|TicketAPI,10,6,40270,586,40856,4491,15.53,0,multi_turn:instance_state_mismatch,Model instance for TicketAPI does not match the state with ground truth instance.
+baseline,long_context,multi_turn_long_context_144,False,3,TradingBot|MathAPI,6,3,90499,2417,92916,36503,68.72,0,multi_turn:empty_turn_model_response,Model response list is empty for turn 2
+baseline,long_context,multi_turn_long_context_145,True,5,MessageAPI|TradingBot,13,8,412717,1554,414271,38448,48.31,0,,
+baseline,long_context,multi_turn_long_context_152,False,3,TicketAPI|TravelAPI,6,5,40479,1016,41495,7971,27.75,0,multi_turn:instance_state_mismatch,Model instance for TravelAPI does not match the state with ground truth instance.
+baseline,long_context,multi_turn_long_context_153,False,5,TravelAPI,10,5,42335,940,43275,5248,22.11,0,multi_turn:instance_state_mismatch,Model instance for TravelAPI does not match the state with ground truth instance.
+baseline,long_context,multi_turn_long_context_154,False,5,MessageAPI|TravelAPI,11,6,62486,1264,63750,7937,23.93,0,multi_turn:execution_response_mismatch,Model response execution results so far does not contain all the ground truth response execution results for turn 1.
+baseline,long_context,multi_turn_long_context_161,True,3,MathAPI|TravelAPI,6,3,30984,484,31468,5479,7.45,0,,
+baseline,long_context,multi_turn_long_context_164,True,4,TravelAPI,10,6,50401,1121,51522,7134,23.76,0,,
+baseline,long_context,multi_turn_long_context_165,True,5,TicketAPI|TravelAPI,12,7,63019,1037,64056,6887,26.05,0,,
+baseline,long_context,multi_turn_long_context_169,True,2,MessageAPI|TravelAPI,7,5,42918,1052,43970,7736,23.28,0,,
+baseline,long_context,multi_turn_long_context_17,True,3,MessageAPI|GorillaFileSystem,12,9,55652,1055,56707,5640,20.27,0,,
+baseline,long_context,multi_turn_long_context_170,False,6,TwitterAPI|TravelAPI,12,7,77403,1204,78607,7416,30.65,0,multi_turn:instance_state_mismatch,Model instance for TravelAPI does not match the state with ground truth instance.
+baseline,long_context,multi_turn_long_context_180,False,6,TicketAPI|TravelAPI,25,19,303935,2939,306874,17987,71.67,0,multi_turn:instance_state_mismatch,Model instance for TicketAPI does not match the state with ground truth instance.
+baseline,long_context,multi_turn_long_context_186,True,6,TwitterAPI|TravelAPI,14,8,110271,1796,112067,9557,45.71,0,,
+baseline,long_context,multi_turn_long_context_190,True,5,TicketAPI|TravelAPI,13,8,90583,1337,91920,8698,32.16,0,,
+baseline,long_context,multi_turn_long_context_194,True,6,TravelAPI,16,10,102647,2213,104860,8201,54.05,0,,
+baseline,long_context,multi_turn_long_context_197,False,3,MessageAPI|TravelAPI,10,7,45138,990,46128,5167,27.15,0,multi_turn:instance_state_mismatch,Model instance for TravelAPI does not match the state with ground truth instance.
+baseline,long_context,multi_turn_long_context_2,True,5,TicketAPI|GorillaFileSystem,23,18,124171,1568,125739,6760,33.03,0,,
+baseline,long_context,multi_turn_long_context_20,True,2,TwitterAPI|GorillaFileSystem,8,6,43054,986,44040,6891,22.45,0,,
+baseline,long_context,multi_turn_long_context_22,True,4,TwitterAPI|GorillaFileSystem,12,8,70636,820,71456,7414,25.21,0,,
+baseline,long_context,multi_turn_long_context_3,True,2,GorillaFileSystem,11,9,36716,667,37383,3751,25.17,0,,
+baseline,long_context,multi_turn_long_context_32,False,2,GorillaFileSystem|MathAPI,6,4,33078,465,33543,5888,22.54,0,multi_turn:instance_state_mismatch,Model instance for GorillaFileSystem does not match the state with ground truth instance.
+baseline,long_context,multi_turn_long_context_33,True,5,MessageAPI|GorillaFileSystem,11,6,61813,672,62485,6616,23.2,0,,
+baseline,long_context,multi_turn_long_context_34,False,2,GorillaFileSystem|MathAPI,6,4,30088,425,30513,5242,15.71,0,multi_turn:instance_state_mismatch,Model instance for GorillaFileSystem does not match the state with ground truth instance.
+baseline,long_context,multi_turn_long_context_37,False,3,GorillaFileSystem,12,9,62164,1266,63430,7160,34.84,0,multi_turn:execution_response_mismatch,Model response execution results so far does not contain all the ground truth response execution results for turn 2.
+baseline,long_context,multi_turn_long_context_4,False,3,TwitterAPI|GorillaFileSystem,9,6,52798,680,53478,6725,10.57,0,multi_turn:instance_state_mismatch,Model instance for TwitterAPI does not match the state with ground truth instance.
+baseline,long_context,multi_turn_long_context_49,False,4,GorillaFileSystem|MathAPI,11,7,70567,862,71429,7326,17.04,0,multi_turn:execution_response_mismatch,Model response execution results so far does not contain all the ground truth response execution results for turn 3.
+baseline,long_context,multi_turn_long_context_55,False,5,TicketAPI|VehicleControlAPI,13,8,94771,859,95630,9010,20.05,0,multi_turn:instance_state_mismatch,Model instance for VehicleControlAPI does not match the state with ground truth instance.
+baseline,long_context,multi_turn_long_context_56,True,3,VehicleControlAPI,12,10,111560,2696,114256,11507,74.52,0,,
+baseline,long_context,multi_turn_long_context_57,True,2,VehicleControlAPI|MathAPI,5,4,36382,452,36834,9090,12.87,0,,
+baseline,long_context,multi_turn_long_context_66,False,4,VehicleControlAPI,12,8,51986,606,52592,5782,11.76,0,multi_turn:instance_state_mismatch,Model instance for VehicleControlAPI does not match the state with ground truth instance.
+baseline,long_context,multi_turn_long_context_68,True,5,TwitterAPI|VehicleControlAPI,18,13,165490,1186,166676,11820,28.17,0,,
+baseline,long_context,multi_turn_long_context_77,True,3,TwitterAPI|VehicleControlAPI,8,6,71230,2476,73706,10948,42.25,0,,
+baseline,long_context,multi_turn_long_context_82,True,3,VehicleControlAPI,15,12,94460,650,95110,7644,17.37,0,,
+baseline,long_context,multi_turn_long_context_90,True,4,TwitterAPI|VehicleControlAPI,17,13,121093,3111,124204,11851,66.08,0,,
+baseline,long_context,multi_turn_long_context_91,True,2,MessageAPI|VehicleControlAPI,7,5,33033,362,33395,5288,17.97,0,,
+baseline,long_context,multi_turn_long_context_92,False,5,VehicleControlAPI,16,11,170922,3000,173922,13841,74.22,0,multi_turn:instance_state_mismatch,Model instance for VehicleControlAPI does not match the state with ground truth instance.
+baseline,long_context,multi_turn_long_context_94,True,3,VehicleControlAPI,14,11,107281,903,108184,11631,19.33,0,,
+baseline,long_context,multi_turn_long_context_97,False,6,MessageAPI|VehicleControlAPI,26,21,420937,2705,423642,22544,56.42,0,multi_turn:instance_state_mismatch,Model instance for VehicleControlAPI does not match the state with ground truth instance.
+baseline,long_context,multi_turn_long_context_98,True,3,VehicleControlAPI|MathAPI,12,9,101195,684,101879,13193,10.79,0,,
 baseline,miss_func,multi_turn_miss_func_1,False,5,GorillaFileSystem,17,12,57368,963,58331,4127,55.96,0,multi_turn:empty_turn_model_response,Model response list is empty for turn 2
 baseline,miss_func,multi_turn_miss_func_103,False,6,MessageAPI|TradingBot,15,9,60090,1198,61288,5001,53.65,0,multi_turn:empty_turn_model_response,Model response list is empty for turn 4
 baseline,miss_func,multi_turn_miss_func_111,False,5,MessageAPI|TradingBot,12,7,46323,814,47137,4549,45.04,0,multi_turn:empty_turn_model_response,Model response list is empty for turn 1
