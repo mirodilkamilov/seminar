@@ -1,2 +1,3 @@
 architecture,category,n_tasks,n_pass,pass_rate,median_latency_s,median_input_tokens,median_total_tokens,median_peak_context,median_llm_calls,max_steps_hits
 baseline,base,50,35,0.7,31.02,43436.5,44441.0,4802.0,11.0,0
+baseline,miss_param,50,10,0.2,29.66,51066.0,51903.5,5151.0,13.0,0
