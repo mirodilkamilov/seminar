@@ -18,50 +18,8 @@ Methodology is locked in `README.md`.
   `utils/schema.py::_normalize_schema()`.
 - [x] **Run baseline end-to-end** — `run_benchmark.py` grades a 5-task sample.
 
-## Phase 0.5: Correctness fixes — DONE
-
-Found in the design review (`REVIEW.md`); each silently corrupts a result if
-skipped. All wired into the shared loop / runner and verified on one live task
-per affected category.
-
-- [x] **Reset simulator instances between runs/tasks** (`REVIEW.md §1`).
-  `utils/executor.py::reset_bfcl_instances()` (deletes `*_instance` keys from
-  `multi_turn_utils.__dict__`), called at the top of every task in `run_one`.
-- [x] **AND the irrelevance checker into grading** (`REVIEW.md §2`).
-  `run_benchmark.py::grade()` ANDs `multi_turn_checker` with
-  `multi_turn_irrelevance_checker`. Verified: a `miss_param` task now FAILs with
-  `irrelevance_error` (would have wrongly passed before).
-- [x] **`miss_func` held-out functions** (`REVIEW.md §2b`). The base loop strips
-  `missed_function` names from the toolset, then re-adds them + injects
-  `DEFAULT_USER_PROMPT_FOR_ADDITIONAL_FUNCTION_FC` at the holdout turn. Verified:
-  tool count 17→18 exactly at the holdout turn.
-- [x] **Thread `long_context` into live execution** (`REVIEW.md §3`).
-  `execute_call_locally(..., long_context)`; the loop derives it from the task
-  id. (The `test_category` arg to `multi_turn_checker` is now a derived string,
-  not a dead literal.)
-- [x] **Capture `error_type`** in `task_end` and the results row (not just
-  `error_message`) — the failure-mode analysis needs it.
-- [x] **Handle `finish_reason == "length"`** (`REVIEW.md §4`). `max_tokens=2048`;
-  truncation logged; tool-call JSON parsing is guarded (stubs unanswered
-  `tool_call`s so the next request stays valid) instead of crashing.
-- [x] **`MAX_STEPS_PER_TURN = 30`, cap-hits logged** (`max_steps_reached` event +
-  `max_steps_hits` stat). Confirm hit-rate ≈ 0 in the pilot.
-- [x] **Don't retry 4xx** (`REVIEW.md §4`). `utils/retry.py` re-raises 4xx
-  (except 429) instead of backing off on a request that can't succeed.
-
 ## Phase 1: Baseline + harness scaffolding
 
-- [x] **Refactor the harness for comparability** (`REVIEW.md §6`/`§7`).
-    - Shared FC loop lives once in `architectures/architecture.py::Architecture`;
-      subclasses (`baseline.py`, `react.py`) only set `name` + `system_prompt`.
-    - No printing in `run_task` — it returns `(calls, stats)`; the runner renders
-      via `utils/logging.py::pretty_print_log`.
-    - Architecture registry + argparse (`--arch --category --sample --limit
-    --seed --make-subset`); architecture instantiated **once** outside the loop.
-    - Results table `results/{arch}/{category}.jsonl` with cost fields
-      (`n_llm_calls`, `n_tool_calls`, `input/output_tokens`, `peak_context`,
-      `latency_s`, `max_steps_hits`) + `error_type`. (Per-run manifest dropped by
-      decision — provenance via git if results are committed.)
 - [x] **Freeze the task subset.** `python run_benchmark.py --make-subset` →
   `task_subset.json` (50/category, stratified by `involved_classes`, seed 42,
   verified 50 unique each). `utils/sampling.py`.

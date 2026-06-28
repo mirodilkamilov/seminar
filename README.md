@@ -73,13 +73,11 @@ meaningful if everything *except* the reasoning scaffold is held constant — se
   **per task** (McNemar / bootstrap over tasks) and report confidence intervals.
   At n=50 this is what gives the comparison statistical power; unpaired
   proportion tests would be too coarse.
-- **Cost is a first-class axis:** from the trajectory logs we report total
-  tokens, peak context, number of LLM calls, and latency per task, and present
-  **pass-rate-vs-cost**. Reflection isn't free — REBACT roughly doubles the LLM
-  calls per action; Reflexion adds retries; the vector-DB variant adds retrieved
-  context. We **measure** how each architecture grows the context window; we do
-  **not** add context management (summarization/truncation) — that would be
-  another confound.
+- **Cost is a first-class axis:** from the logs we report total tokens, peak
+  context, LLM-call count, and latency per task, and plot **pass-rate-vs-cost**.
+  Reflection isn't free (REBACT ~doubles calls, Reflexion adds retries, vector-DB
+  adds retrieved context). We **measure** context growth but **don't** add context
+  management (summarization/truncation) — that would be another confound.
 
 ### Fairness invariants (the comparison is invalid if any is violated)
 
@@ -88,12 +86,21 @@ meaningful if everything *except* the reasoning scaffold is held constant — se
   (Thought, reflection) is free text. Parsing actions from text in one
   architecture and using native FC in another would give them different
   decoding-failure rates that masquerade as reasoning differences.
-- **Zero-shot, always.** No few-shot exemplars, and never exemplars borrowed
-  from another benchmark (GSM8K, ALFWorld, …). Modern instruction-tuned models
-  follow format instructions without them, and exemplars would inject
-  task-specific knowledge that confounds "does reasoning help". The only text
-  that differs across conditions is the reasoning/reflection scaffold; the
-  task-instruction core of the system prompt is shared.
+- **Zero-shot, always.** No few-shot exemplars, and never any borrowed from
+  another benchmark (GSM8K, ALFWorld, …) — they'd inject task-specific knowledge
+  that confounds "does reasoning help". The only text that differs across
+  conditions is the reasoning scaffold; the task-instruction core of the prompt
+  is shared.
+- **Shared task core (`BASE_TASK_INSTRUCTION`).** All five build their system
+  prompt from one identical core, adding only their reasoning scaffold on top
+  (enforced in code, not by convention). The core is a *simplified, FC-adapted*
+  version of BFCL's intended task instruction — we keep its two behavioural
+  cues (flag when no tool fits or a required parameter is missing rather than
+  guessing; keep calling tools until done, a no-call reply ends the turn) but
+  drop its text-action format directives, since actions go through the native FC
+  channel. Including the missing-tool/parameter cue makes the **baseline a fair,
+  non-strawman control** — reflection is then credited only with gains *beyond* a
+  competent plain prompt, not with recovering from one we deliberately weakened.
 - **Same model, same subset, same `temperature=0`, same step budget**
   (`MAX_STEPS_PER_TURN = 30`, with every cap-hit logged — the cap only guards
   against runaway loops and should never fire on a legitimate trajectory;
@@ -113,15 +120,45 @@ meaningful if everything *except* the reasoning scaffold is held constant — se
   cross-task reflections, compared against episodic Reflexion@1 to isolate the
   value of *persistent* memory. Task order is fixed and we plot the learning
   curve (pass rate vs. position as memory fills).
-- **REBACT** uses **state rewind** to revise mutating actions, implemented by
-  rebuilding the simulator from its initial config and replaying only the kept
-  calls. **This is not faithful to a real deployment** — a deployed agent cannot
-  un-send a committed mutation — and we say so explicitly. We accept it because
-  the RQ is about the *value of self-reflection* independent of deployment
-  constraints; the read-only-only alternative would neuter reflection on exactly
-  the tasks where it matters. (Framing: if reflection-with-rewind proves
-  valuable, a follow-up is to distill the successful rewound trajectories into a
-  model that operates without rewind in production.)
+- **REBACT** uses **state rewind** to revise mutating actions (rebuild the
+  simulator from its initial config, replay only the kept calls). **This is not
+  faithful to a real deployment** — an agent cannot un-send a committed mutation —
+  and we say so. We accept it because the RQ is about the *value of
+  self-reflection*, not deployability; a read-only-only variant would neuter
+  reflection on exactly the mutating tasks where it matters. (If rewind proves
+  valuable, a natural follow-up distills the rewound trajectories into a model
+  that runs without it.)
+
+### What each architecture adds beyond cognition
+
+Beyond the reasoning scaffold, two architectures quietly gain something else.
+These are **named confounds**, not features of "reflection":
+
+- **Reflexion gets an oracle** — the grader tells it the task failed before it
+  retries; the others get one shot, no answer key. (Sanitized as above, but the
+  fail/retry bit is itself information they lack.)
+- **REBACT gets an undo** — the state rewind (above). It does **not** get the
+  oracle, so it has the **same information as ReAct**; the only difference is the
+  undo.
+
+So the five pass rates are **not a single ladder** where more reflection = higher
+score — that would credit reflection with gains from the oracle or the undo. We
+lead Results with the clean within-family contrasts and treat the absolute
+five-way ranking as *illustrative*:
+
+| Compare…                                  | …isolates                                                                       | Clean?                                                                                         |
+|-------------------------------------------|---------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|
+| Baseline → ReAct                          | pure added thinking, nothing else changes                                       | ✅ fully clean                                                                                  |
+| Reflexion@1 → Reflexion@k                 | value of reflecting-after-failure                                               | ✅ clean (same architecture)                                                                    |
+| Reflexion-episodic@1 → Reflexion-vectorDB | value of *persistent* cross-task memory                                         | ✅ clean                                                                                        |
+| ReAct → REBACT                            | *where* in the loop reflection sits (reason-before-act vs reflect-after-result) | ◐ same info, no oracle; only confound is the undo — we **measure the rewind rate** as its size |
+| ReAct vs REBACT vs Reflexion (absolute)   | "which idea wins overall"                                                       | ⚠️ confounded by oracle / undo                                                                 |
+
+The `ReAct → REBACT` pair is the most direct answer to the research question
+("*where* in the loop does reflection help"), and its only confound is the undo —
+whose magnitude we quantify from the REBACT logs (how often a rewind actually
+fires). On read-only-heavy turns nothing gets un-done, so the confound is bounded
+by the measured rewind rate rather than assumed.
 
 ### Limitations
 
@@ -155,15 +192,27 @@ gorilla/          cloned BFCL repo at tag v1.3 (do not edit; third-party)
 logs/             per-task trajectory JSONL
 CLAUDE.md         implementation details + conventions
 NEXT_STEPS.md     ordered task list ("what to work on next")
-REVIEW.md         design-review findings / correctness fixes to apply
 ```
 
 ## Running
 
 ```bash
 # .env must contain FIM_API_KEY
-python run_benchmark.py
+python run_benchmark.py                              # baseline, full frozen subset
+
+python run_benchmark.py --make-subset                # freeze task_subset.json and exit
+python run_benchmark.py --arch react --category base # one architecture, one category
+python run_benchmark.py --arch baseline --sample 5   # quick smoke (random, no frozen subset)
+python run_benchmark.py --arch baseline --tag run2   # noise re-run → separate output dir
+
+# Re-run specific task id(s) — category is inferred from the id, and the fresh
+# row(s) are MERGED into the existing category file (matching rows replaced,
+# all others kept). Handy for debugging or re-measuring a single task.
+python run_benchmark.py --task-id multi_turn_base_90
+python run_benchmark.py --task-id multi_turn_base_90 multi_turn_miss_param_1
 ```
 
-Each run writes a full trajectory log to `logs/{architecture}/{task_id}.jsonl`.
+Each run writes a full trajectory log to `logs/{architecture}/{task_id}.jsonl`,
+a per-task results table to `results/{label}/{category}.jsonl`, and regenerates
+the analysis CSVs (`results/results.csv`, `results/summary.csv`) at the end.
 

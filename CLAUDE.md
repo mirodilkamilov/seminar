@@ -54,28 +54,6 @@ result. See README.md "Methodology" for the rationale.
   cloned to `./gorilla/`). Multi-turn data lives in
   `gorilla/berkeley-function-call-leaderboard/bfcl_eval/data/`.
 
-## Current state (as of 2026-05-29)
-
-- **Phases 0, 0.5, and 1-scaffolding complete** (see `NEXT_STEPS.md`). All
-  correctness fixes from the design review (`REVIEW.md`) are applied and each
-  verified on a live task in its category: per-task instance reset, irrelevance
-  gate ANDed into grading, `miss_func` held-out functions, `long_context` live
-  flag, `error_type` capture, `finish_reason=="length"` handling, no-retry-on-4xx.
-- **Methodology decisions locked** (see "Methodology decisions (locked)" below
-  and `README.md` for rationale).
-- **Harness refactored for comparability**: shared FC loop in
-  `architectures/architecture.py`; `baseline.py` / `react.py` only set `name` +
-  `system_prompt`. Runner has a registry + argparse CLI; results table at
-  `results/{arch}/{category}.jsonl` with cost fields.
-- **Subset frozen** to `task_subset.json` (seed 42, 50/category, stratified by
-  `involved_classes`). **ReAct is implemented** alongside the baseline.
-- Smoke tests pass (`test_api.py`, `test_function_calling.py`); a 6-task baseline
-  pilot is in `logs/baseline/` (`results/` not yet created).
-- **Next (immediate):** run the FC baseline over the full 200-task subset — the
-  first real result — then the baseline noise re-run, then ReAct over the subset.
-  No production run has happened yet; Reflexion (episodic + vector DB) and REBACT
-  are unstarted.
-
 ## Important implementation details
 
 ### Schema conversion (`utils/schema.py`)
@@ -85,11 +63,7 @@ BFCL function docs use two type names that are **not valid JSON Schema**:
 - `"dict"` → must become `"object"` (top-level AND in nested properties)
 - `"float"` → must become `"number"` (42 occurrences across all 8 doc files)
 
-Both are fixed recursively in `utils/schema.py::_normalize_schema()`. An earlier
-helper only patched the top-level type and missed `float` entirely — it would
-have silently broken on MathAPI, TradingBot, TravelAPI, and TicketAPI tasks.
-
-Always use `utils.schema.load_tools_for_classes()` — never the old helper.
+Both are fixed recursively in `utils/schema.py::_normalize_schema()`.
 
 ### Retry (`utils/retry.py`)
 
@@ -211,7 +185,7 @@ each other.
 
 ### REBACT rewind — DECISION: rewind-with-record-editing (primary)
 
-We go with state rewind (the old "Option B") as REBACT's primary mechanism, not
+We go with state rewind as REBACT's primary mechanism, not
 the read-only restriction. Rationale: the RQ is about the *value of
 self-reflection*, and the read-only restriction would neuter reflection on
 exactly the mutating tasks where revision matters. We accept that rewind is
@@ -231,12 +205,6 @@ list (`all_turns_calls`), not the live execution. So a rewind must edit **both**
    retracted mutating call, the grader replays it and the state check fails for
    a trajectory the agent didn't actually end in. Live state and recorded list
    must stay in lockstep at all times.
-
-## Resolved questions
-
-- ~~**State persistence**~~ → Confirmed from source. See above.
-- ~~**`is_evaL_run` spelling**~~ → Capital-L confirmed. Our code is correct.
-- ~~**Schema `dict`/`float` types**~~ → Fixed in `utils/schema.py`.
 
 ## Methodology decisions (locked — see README.md for rationale)
 
@@ -273,6 +241,13 @@ list (`all_turns_calls`), not the live execution. So a rewind must edit **both**
   Preferably do not count reflection sub-calls (REBACT/Reflexion) against the
   budget — it caps *actions*, not *thoughts*. After the pilot, check the
   hit-rate is ~0 for every architecture.
+- **`max_tokens = 8192`, identical across all five.** Part of the fixed setup, so
+  a shared token budget can't penalize the talkative (thinking) architectures
+  whose reply carries a Thought/reflection *plus* the tool call — a truncated
+  reply can cut the tool-call JSON and fail for a formatting reason. Set generous
+  (a ceiling, not a target: you pay only for tokens emitted) so it never fires;
+  `stats["truncations"]`/`["parse_errors"]` count when it does — verify ~0 per
+  architecture, bump higher if not.
 
 ### Reflexion adaptation to BFCL (within-task retries — distinct from trials)
 
@@ -319,7 +294,6 @@ cost axis). Qualitative analysis:
 ├── CLAUDE.md
 ├── README.md                   # human-facing overview + locked methodology + rationale
 ├── NEXT_STEPS.md               # ordered task list; source of truth for "what next"
-├── REVIEW.md                   # design review findings (correctness fixes to apply)
 ├── .env                        # FIM_API_KEY (gitignored)
 ├── architectures/              # one file per architecture; all share utils/
 │   ├── __init__.py
@@ -357,9 +331,11 @@ cost axis). Qualitative analysis:
 - **Honor the fairness invariants** (see "Architectures under comparison"):
   actions via native FC only, zero-shot, shared system-prompt core. The only
   thing a new architecture adds is reasoning/reflection cognition + loop shape.
-- New architectures live in `architectures/<name>.py` and subclass the base in
-  `architectures/function_calling_abstract.py`; give each an explicit `name`
-  used for log/results dirs (don't rely on `__class__.__name__`).
+- New architectures live in `architectures/<name>.py` and subclass the base
+  class `Architecture` in `architectures/architecture.py`; give each an explicit
+  `name` used for log/results dirs (don't rely on `__class__.__name__`). The
+  shared loop is decomposed into override points (`_run_turn`, `_call_model`,
+  `_execute_calls`, …) — hook those rather than copying `_run_fc_loop`.
 - Keep orchestration (printing, grading, logging, instance reset) in the runner
   / utils, **not** inside `run_task`, so architectures stay minimal and
   comparable.
