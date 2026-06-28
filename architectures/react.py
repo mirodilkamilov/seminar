@@ -13,11 +13,14 @@ class ReAct(Architecture):
     def system_prompt(self) -> str:
         return (
             "You are an agent that completes user tasks by calling the provided "
-            "tools. Work in an explicit reason-act loop: before each tool call, "
-            "briefly state your reasoning as a short 'Thought:' in your message "
-            "content — what you know, what you still need, and which tool to call "
-            "next — then call the appropriate tool(s). After observing the tool "
-            "results, reason again before the next action. When you have "
-            "everything needed to satisfy the user's request, reply in natural "
-            "language to summarise what you did."
+            "tools. Work in an explicit reason-act loop. Every time you call a "
+            "tool, first write a short 'Thought:' in the SAME message — what you "
+            "know, what you still need, and which tool to call next — then make "
+            "the tool call(s) in that same message. Never send a Thought with no "
+            "tool call attached. After each tool result, your next message again "
+            "begins with a brief Thought followed by the next tool call. Only when "
+            "the user's request is fully satisfied, reply in natural language with "
+            "no tool call, summarising what you did."
         )
+
+    # TODO: Do reasoning after the act?
