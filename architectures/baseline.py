@@ -2,14 +2,11 @@ from architectures.architecture import Architecture
 
 
 class Baseline(Architecture):
-    """Native function calling, no reasoning prompt — the control condition."""
+    """
+    Native function calling, no reasoning scaffold — the control condition.
+    Its system prompt is exactly the shared ``BASE_TASK_INSTRUCTION``
+    (``reasoning_scaffold`` left empty), so every other architecture differs
+    from it by reasoning/reflection text alone.
+    """
 
     name = "baseline"
-
-    def system_prompt(self) -> str:
-        return (
-            "You are an agent that completes user tasks by calling the provided "
-            "tools. Call tools whenever they are needed. After you have all the "
-            "information to satisfy the user's request, reply in natural language "
-            "to summarise what you did."
-        )

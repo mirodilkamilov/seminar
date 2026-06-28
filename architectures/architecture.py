@@ -12,28 +12,59 @@ Fairness invariants enforced here (see README.md):
   - zero-shot (no exemplars);
   - `temperature=0`.
 """
+
 import json
 from abc import ABC
 
+# utils.config (imported above) has already put the BFCL repo on sys.path.
+from bfcl_eval.constants.default_prompts import (
+    DEFAULT_USER_PROMPT_FOR_ADDITIONAL_FUNCTION_FC as _ADDITIONAL_FUNCTION_PROMPT,
+)
 from utils.config import MAX_STEPS_PER_TURN, client, MODEL, DOCS_DIR
 from utils.executor import tool_call_to_python_string, execute_call_locally
 from utils.logging import TrajectoryLogger
 from utils.retry import call_with_retry
 from utils.schema import load_tools_for_classes
 
-# utils.config (imported above) has already put the BFCL repo on sys.path.
-from bfcl_eval.constants.default_prompts import (
-    DEFAULT_USER_PROMPT_FOR_ADDITIONAL_FUNCTION_FC as _ADDITIONAL_FUNCTION_PROMPT,
+"""
+Shared task-instruction core, held IDENTICAL across all five architectures
+(fairness invariant: only the reasoning/reflection scaffold may differ).
+Two semantic pieces are adapted from BFCL's intended task instruction: 
+(1) recognise when no tool fits or a required parameter is missing instead of 
+guessing — this is what ``multi_turn_irrelevance_checker`` rewards; (2) the turn-completion
+protocol that matches how the loop ends a turn (a reply with no tool call).
+"""
+BASE_TASK_INSTRUCTION = (
+    "You are an agent that completes user tasks by calling the provided tools. "
+    "Call tools whenever they are needed to satisfy the user's request.\n"
+    "If none of the available tools can fulfil the request, say so instead of "
+    "guessing. If the request is missing a value that a tool requires, ask the "
+    "user for it.\n"
+    "Keep calling tools until the current request is fully handled. When you "
+    "have nothing left to call, reply in natural language summarising what you "
+    "did — a message with no tool call ends the current turn."
 )
 
 
 class Architecture(ABC):
-    #: short identifier used for log/results directories — override per subclass
+    # short identifier used for log/results directories — override per subclass
     name: str = "architecture"
 
+    # architecture-specific reasoning scaffold, appended to the shared task
+    # core. Empty for the baseline; reasoning architectures override it.
+    reasoning_scaffold: str = ""
+
     def system_prompt(self) -> str:
-        """The system prompt. Subclasses override to vary the reasoning scaffold."""
-        raise NotImplementedError
+        """
+        Shared task-instruction core plus this architecture's reasoning scaffold.
+        The core (``BASE_TASK_INSTRUCTION``) is identical for all architectures;
+        only ``reasoning_scaffold`` varies — that is the fairness invariant in
+        code. Subclasses normally set ``reasoning_scaffold`` rather than override
+        this method.
+        """
+        if self.reasoning_scaffold:
+            return f"{BASE_TASK_INSTRUCTION}\n\n{self.reasoning_scaffold}"
+        return BASE_TASK_INSTRUCTION
 
     def run_task(
         self, task: dict, tlog: TrajectoryLogger
@@ -85,10 +116,14 @@ class Architecture(ABC):
         """
         Split the task's tools into those active from turn 0 and those held out.
 
-        ``miss_func`` tasks hold some functions out of the toolset until a later
-        "holdout" turn; ``missed_function`` maps ``{turn_idx_str: [func names]}``.
-        Returns ``(active_tools, held_out_tools, missed)`` where ``held_out_tools``
-        is keyed by name for re-adding at the holdout turn.
+        ``miss_func`` tasks hide some functions until a later "holdout" turn via
+        ``missed_function``, which maps a 0-based turn index (string key, as JSON
+        keys always are) to the names revealed then — e.g. ``{"2": ["mv"]}`` holds
+        ``mv`` out until turn 2. ``_reveal_held_out`` re-adds them at that turn.
+
+        Returns ``(active_tools, held_out_tools, missed)``: ``active_tools``
+        excludes every held-out name, ``held_out_tools`` is keyed by name for
+        re-adding, and ``missed`` is the raw mapping.
         """
         all_tools = load_tools_for_classes(task["involved_classes"], DOCS_DIR)
         missed = task.get("missed_function", {})
@@ -113,10 +148,10 @@ class Architecture(ABC):
             "peak_context": 0,
             "latency_s": 0.0,
             "max_steps_hits": 0,
-            # Fairness guards (see README "What each architecture adds"): a reply
-            # truncated at max_tokens can cut the tool-call JSON at the end of a
-            # long Thought/reflection. Counted so the results table shows a
-            # per-architecture truncation/parse rate; verify it stays ~0.
+            # Fairness guards: a reply truncated at max_tokens can cut the
+            # tool-call JSON at the end of a long Thought/reflection.
+            # Counted so the results table shows a per-architecture
+            # truncation/parse rate; verify it stays ~0.
             "truncations": 0,
             "parse_errors": 0,
         }
@@ -131,8 +166,10 @@ class Architecture(ABC):
     ) -> list[dict]:
         """
         At a ``miss_func`` holdout turn, reveal the held-out function(s) (mutating
-        ``active_tools`` in place) and replace the empty question turn with BFCL's
-        synthetic "more functions available" prompt. Otherwise a no-op.
+        ``active_tools`` in place) and swap the empty question turn for BFCL's
+        synthetic "more functions available" prompt. Otherwise a no-op. See
+        ``_setup_tools`` for the ``missed`` mapping format - ``{"2": ["mv"]}`` holds
+        ``mv`` out until turn 2.
         """
         if str(turn_idx) not in missed:
             return turn_messages
@@ -198,11 +235,8 @@ class Architecture(ABC):
             temperature=0,
             # Generous ceiling, not a target: we pay only for tokens the model
             # actually emits, so a high cap costs nothing on normal replies but
-            # prevents ever truncating a Thought/reflection + tool_call (the §B.3
-            # confound). Largest observed legit reply was ~2k tokens; 8192 leaves
-            # 4x headroom while still bounding a runaway loop. Same value across
-            # all five architectures. `stats["truncations"]` must stay ~0 — bump
-            # higher if not.
+            # prevents ever truncating a Thought/reflection + tool_call. Same value
+            # across all five architectures. `stats["truncations"]` must stay ~0
             max_tokens=8192,
         )
         tlog.llm_response(turn_idx, step, response, latency)
@@ -213,9 +247,7 @@ class Architecture(ABC):
         if usage:
             stats["input_tokens"] += usage.prompt_tokens or 0
             stats["output_tokens"] += usage.completion_tokens or 0
-            stats["peak_context"] = max(
-                stats["peak_context"], usage.prompt_tokens or 0
-            )
+            stats["peak_context"] = max(stats["peak_context"], usage.prompt_tokens or 0)
         if response.choices[0].finish_reason == "length":
             # Truncated response: tool-call JSON may be malformed downstream.
             stats["truncations"] += 1
