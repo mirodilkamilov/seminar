@@ -16,15 +16,16 @@ Fairness invariants enforced here (see README.md):
 import json
 from abc import ABC
 
-# utils.config (imported above) has already put the BFCL repo on sys.path.
-from bfcl_eval.constants.default_prompts import (
-    DEFAULT_USER_PROMPT_FOR_ADDITIONAL_FUNCTION_FC as _ADDITIONAL_FUNCTION_PROMPT,
-)
 from utils.config import MAX_STEPS_PER_TURN, client, MODEL, DOCS_DIR
 from utils.executor import tool_call_to_python_string, execute_call_locally
 from utils.logging import TrajectoryLogger
 from utils.retry import call_with_retry
 from utils.schema import load_tools_for_classes
+
+# utils.config (imported above) has already put the BFCL repo on sys.path.
+from bfcl_eval.constants.default_prompts import (
+    DEFAULT_USER_PROMPT_FOR_ADDITIONAL_FUNCTION_FC as _ADDITIONAL_FUNCTION_PROMPT,
+)
 
 """
 Shared task-instruction core, held IDENTICAL across all five architectures
