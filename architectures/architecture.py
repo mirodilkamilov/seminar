@@ -93,9 +93,19 @@ class Architecture(ABC):
         stats = self._init_stats()
 
         for turn_idx, turn_messages in enumerate(task["question"]):
+            revealed = missed.get(str(turn_idx))
             turn_messages = self._reveal_held_out(
                 turn_idx, missed, held_out_tools, active_tools, turn_messages
             )
+            if revealed:
+                # Transparency: record exactly which held-out tool(s) became
+                # available at this holdout turn, and the new active-tool count.
+                tlog.event(
+                    "tools_revealed",
+                    turn_idx=turn_idx,
+                    names=revealed,
+                    n_active_tools=len(active_tools),
+                )
             messages.extend(turn_messages)
             tlog.user_turn(turn_idx, turn_messages)
 

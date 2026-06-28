@@ -13,9 +13,11 @@ Each line is a JSON object with at minimum:
 
 Standard event types
 --------------------
-task_start      task_id, architecture, involved_classes
+task_start      task_id, architecture, involved_classes, n_turns,
+                missed_function ({turn_idx_str: [held-out names]}, miss_func only)
 user_turn       turn_idx, messages (list of {role, content})
 llm_request     turn_idx, step, model, n_messages, n_tools
+tools_revealed  turn_idx, names, n_active_tools (miss_func holdout turn only)
 llm_response    turn_idx, step, finish_reason, content, tool_calls,
                 input_tokens, output_tokens, latency_s
 tool_call       turn_idx, step, call_idx, name, arguments (dict), call_str
@@ -91,6 +93,9 @@ class TrajectoryLogger:
             architecture=self.architecture,
             involved_classes=task.get("involved_classes", []),
             n_turns=len(task.get("question", [])),
+            # miss_func only: which functions are held out and at which turn they
+            # are revealed (empty for other categories). See _setup_tools.
+            missed_function=task.get("missed_function", {}),
         )
 
     def user_turn(self, turn_idx: int, messages: list[dict]) -> None:
@@ -242,6 +247,12 @@ def pretty_print_log(path, printer=print) -> None:
             printer(f"[tool_call] {ev['call_str']}")
         elif t == "tool_result":
             printer(f"[tool_result] {ev['result']}")
+        elif t == "tools_revealed":
+            names = ", ".join(ev.get("names", []))
+            printer(
+                f"[tools_revealed] {names} "
+                f"(now {ev.get('n_active_tools')} tools available)"
+            )
         elif t == "reflection":
             printer(f"[reflection] {ev.get('text', '')}")
         elif t == "max_steps_reached":
