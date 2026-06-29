@@ -37,6 +37,7 @@ Usage (context manager)
         tlog.task_end(passed=True)
 """
 
+import ast
 import json
 import time
 from pathlib import Path
@@ -223,26 +224,131 @@ class TrajectoryLogger:
         return False  # don't suppress exceptions
 
 
-def pretty_print_log(path, printer=print) -> None:
+def _norm_val(v):
+    """Normalize a literal so equal-but-differently-written values compare equal
+    (e.g. 750 vs 750.0). bool is kept distinct from int."""
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)):
+        return float(v)
+    if isinstance(v, (list, tuple)):
+        return tuple(_norm_val(x) for x in v)
+    if isinstance(v, dict):
+        return tuple(sorted((k, _norm_val(x)) for k, x in v.items()))
+    return v
+
+
+def _call_name(call_str):
+    """Function name of a call string (the text before the first '(')."""
+    return call_str.split("(", 1)[0].strip()
+
+
+def _canon_call(call_str):
+    """Order-/whitespace-/number-insensitive key for a call string, so model
+    calls can be matched against ground-truth calls. Falls back to the stripped
+    string when the call doesn't parse as a simple literal call."""
+    try:
+        node = ast.parse(call_str.strip(), mode="eval").body
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+            return call_str.strip()
+        pos = tuple(_norm_val(ast.literal_eval(a)) for a in node.args)
+        kw = frozenset(
+            (k.arg, _norm_val(ast.literal_eval(k.value))) for k in node.keywords
+        )
+        return (node.func.id, pos, kw)
+    except Exception:
+        return call_str.strip()
+
+
+def _print_unmatched_gt(printer, gt_calls, made, turn_model_calls) -> None:
+    """Flag the turn's GT calls the model didn't satisfy.
+
+    `made` is the global set of canonical model calls; `turn_model_calls` are the
+    raw call strings the model made *this* turn. A GT call the model made exactly
+    (anywhere) is skipped. Otherwise it's reported as never-called, or — if the
+    model called the same function this turn with other arguments — as a diff.
+    """
+    by_name = {}
+    for c in turn_model_calls:
+        by_name.setdefault(_call_name(c), []).append(c)
+
+    lines = []
+    for gt in gt_calls:
+        if _canon_call(gt) in made:
+            continue
+        same_fn = by_name.get(_call_name(gt))
+        lines.append((gt, same_fn))
+    if not lines:
+        return
+
+    printer("❌ ground truth not satisfied here:")
+    for gt, same_fn in lines:
+        if same_fn:
+            printer(f"     expected:         {gt}")
+            for actual in same_fn:
+                printer(f"     model called:     {actual}")
+        else:
+            printer(f"     never called:     {gt}")
+
+
+def pretty_print_log(path, printer=print, ground_truth=None) -> None:
     """
     Render a trajectory JSONL (written by `TrajectoryLogger`) as readable text.
 
     Single source of truth for console output: architectures only *log*; the
     runner calls this to print. Also handy for eyeballing failures during the
     qualitative analysis.
+
+    `ground_truth`, if given, is the BFCL answer for this task — a list indexed
+    by turn, each a list of expected call strings. On a FAIL, each GT call the
+    model didn't satisfy is flagged inline at its turn (matched
+    whitespace/order/number-insensitively): either as *never called*, or — when
+    the model called the same function with different arguments — as an
+    expected-vs-actual diff. GT calls the model did make exactly aren't shown;
+    they're not the problem. (Loaded by the analysis CLI; the runner passes none.)
     """
     with open(path, encoding="utf-8") as fh:
         events = [json.loads(line) for line in fh if line.strip()]
 
+    # Surface the final grade up front (scanned ahead of the trajectory).
+    end = next((e for e in events if e["type"] == "task_end"), None)
+    failed = end is not None and end.get("result") != "pass"
+    if end is not None:
+        if not failed:
+            printer("✅ PASS")
+        else:
+            etype = end.get("error_type") or "unknown"
+            emsg = end.get("error_message") or ""
+            printer(f"❌ FAIL — {etype}: {emsg}".rstrip())
+
+    # Model calls: a global exact set (did the model make this call *anywhere*?)
+    # and a per-turn name->calls map (to show same-function arg diffs in place).
+    made = set()
+    calls_by_turn = {}
+    for e in events:
+        if e["type"] == "tool_call":
+            made.add(_canon_call(e["call_str"]))
+            calls_by_turn.setdefault(e["turn_idx"], []).append(e["call_str"])
+
     for ev in events:
         t = ev["type"]
         if t == "user_turn":
+            turn_idx = ev["turn_idx"]
+            printer(f"\n--- Turn {turn_idx} ---")
             for m in ev.get("messages", []):
-                printer(f"\n--- Turn {ev['turn_idx'] + 1} ---")
                 printer(f"[user] {m.get('content')}")
-        elif t == "llm_response" and ev.get("content"):
-            # Reasoning / final answer text the model produced.
-            printer(f"[assistant] {ev['content']}")
+            if failed and ground_truth and turn_idx < len(ground_truth):
+                _print_unmatched_gt(
+                    printer, ground_truth[turn_idx], made, calls_by_turn.get(turn_idx, [])
+                )
+        elif t == "llm_response":
+            # Reasoning / final answer text the model produced. Pure tool-call
+            # turns carry no text — still surface them so the turn is visible.
+            content = (ev.get("content") or "").rstrip()
+            if content:
+                printer(f"[assistant] {content}")
+            elif ev.get("tool_calls"):
+                printer("[assistant] (tool call, no text)")
         elif t == "tool_call":
             printer(f"[tool_call] {ev['call_str']}")
         elif t == "tool_result":
@@ -256,4 +362,11 @@ def pretty_print_log(path, printer=print) -> None:
         elif t == "reflection":
             printer(f"[reflection] {ev.get('text', '')}")
         elif t == "max_steps_reached":
-            printer(f"⚠ MAX_STEPS_PER_TURN reached on turn {ev['turn_idx'] + 1}")
+            printer(f"⚠ MAX_STEPS_PER_TURN reached on turn {ev['turn_idx']}")
+        elif t == "truncated":
+            printer(f"⚠ truncated (max_tokens) on turn {ev['turn_idx']}")
+        elif t == "tool_call_parse_error":
+            printer(
+                f"⚠ tool-call parse error on turn {ev['turn_idx']}: "
+                f"{ev.get('name')}({ev.get('raw_arguments')})"
+            )
