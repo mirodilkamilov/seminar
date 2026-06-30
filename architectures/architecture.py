@@ -87,9 +87,10 @@ class Architecture(ABC):
         active_tools, held_out_tools, missed = self._setup_tools(task)
         # long_context category must match the grader's simulator scaffold.
         long_context = "long_context" in task["id"]
-        tlog.task_start(task)
+        system_prompt = self.system_prompt()
+        tlog.task_start(task, system_prompt=system_prompt)
 
-        messages = [{"role": "system", "content": self.system_prompt()}]
+        messages = [{"role": "system", "content": system_prompt}]
         all_turns_calls: list[list[list[str]]] = []
         stats = self._init_stats()
 

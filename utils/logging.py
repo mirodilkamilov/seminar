@@ -14,7 +14,8 @@ Each line is a JSON object with at minimum:
 Standard event types
 --------------------
 task_start      task_id, architecture, involved_classes, n_turns,
-                missed_function ({turn_idx_str: [held-out names]}, miss_func only)
+                missed_function ({turn_idx_str: [held-out names]}, miss_func only),
+                system_prompt (task core + architecture reasoning scaffold)
 user_turn       turn_idx, messages (list of {role, content})
 llm_request     turn_idx, step, model, n_messages, n_tools
 tools_revealed  turn_idx, names, n_active_tools (miss_func holdout turn only)
@@ -87,7 +88,7 @@ class TrajectoryLogger:
     # Structured event methods — call these from your agent loop
     # ------------------------------------------------------------------
 
-    def task_start(self, task: dict) -> None:
+    def task_start(self, task: dict, system_prompt: str | None = None) -> None:
         self._write(
             "task_start",
             task_id=task["id"],
@@ -97,6 +98,11 @@ class TrajectoryLogger:
             # miss_func only: which functions are held out and at which turn they
             # are revealed (empty for other categories). See _setup_tools.
             missed_function=task.get("missed_function", {}),
+            # Exact system prompt for this run (shared task core + this
+            # architecture's reasoning scaffold). Logged per task so every
+            # trajectory is a self-contained, reproducible record of the prompt
+            # that produced it — important while the scaffold is being tuned.
+            system_prompt=system_prompt,
         )
 
     def user_turn(self, turn_idx: int, messages: list[dict]) -> None:
@@ -330,11 +336,20 @@ def pretty_print_log(path, printer=print, ground_truth=None) -> None:
             made.add(_canon_call(e["call_str"]))
             calls_by_turn.setdefault(e["turn_idx"], []).append(e["call_str"])
 
+    # System prompt (scanned ahead) to be rendered inside turn 0, right before that turn's user message.
+    system_prompt = next(
+        (e.get("system_prompt") for e in events if e["type"] == "task_start"), None
+    )
+
     for ev in events:
         t = ev["type"]
         if t == "user_turn":
             turn_idx = ev["turn_idx"]
             printer(f"\n--- Turn {turn_idx} ---")
+            # Guarded so logs predating this field (e.g. earlier baseline runs)
+            # still render cleanly — they just omit the [system] line.
+            if turn_idx == 0 and system_prompt:
+                printer(f"[system] {system_prompt}")
             for m in ev.get("messages", []):
                 printer(f"[user] {m.get('content')}")
             if failed and ground_truth and turn_idx < len(ground_truth):
