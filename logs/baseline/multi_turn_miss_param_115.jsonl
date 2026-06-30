@@ -1,4 +1,4 @@
-{"ts": 0.0, "type": "task_start", "task_id": "multi_turn_miss_param_115", "architecture": "baseline__run2", "involved_classes": ["TradingBot"], "n_turns": 5, "missed_function": {}}
+{"ts": 0.0, "type": "task_start", "task_id": "multi_turn_miss_param_115", "architecture": "baseline", "involved_classes": ["TradingBot"], "n_turns": 5, "missed_function": {}}
 {"ts": 0.0, "type": "user_turn", "turn_idx": 0, "messages": [{"role": "user", "content": "Provide a real-time update on the market status. Is it currently open or closed?"}]}
 {"ts": 0.0, "type": "llm_request", "turn_idx": 0, "step": 0, "model": "qwen3-next-80b-a3b-instruct", "n_messages": 2, "n_tools": 22}
 {"ts": 0.567, "type": "llm_response", "turn_idx": 0, "step": 0, "finish_reason": "tool_calls", "content": "I'll check the current market status for you. First, I need to get the current time, and then I'll update the market status based on that time.\n\n", "tool_calls": [{"id": "chatcmpl-tool-aedbae89406ccdb1", "name": "get_current_time", "arguments": "{}"}], "input_tokens": 2538, "output_tokens": 50, "latency_s": 0.566}

@@ -1,4 +1,4 @@
-{"ts": 0.0, "type": "task_start", "task_id": "multi_turn_miss_param_2", "architecture": "baseline__run2", "involved_classes": ["TicketAPI", "GorillaFileSystem"], "n_turns": 6, "missed_function": {}}
+{"ts": 0.0, "type": "task_start", "task_id": "multi_turn_miss_param_2", "architecture": "baseline", "involved_classes": ["TicketAPI", "GorillaFileSystem"], "n_turns": 6, "missed_function": {}}
 {"ts": 0.001, "type": "user_turn", "turn_idx": 0, "messages": [{"role": "user", "content": "Go into document folder and Could you draft up a document for keeping track of all the fresh ideas?"}]}
 {"ts": 0.001, "type": "llm_request", "turn_idx": 0, "step": 0, "model": "qwen3-next-80b-a3b-instruct", "n_messages": 2, "n_tools": 27}
 {"ts": 0.727, "type": "llm_response", "turn_idx": 0, "step": 0, "finish_reason": "tool_calls", "content": "I'll help you create a document for tracking fresh ideas. First, let's navigate to the document folder and then create the document.\n\n", "tool_calls": [{"id": "chatcmpl-tool-984c56b5c9a60440", "name": "cd", "arguments": "{\"folder\": \"document\"}"}], "input_tokens": 4015, "output_tokens": 46, "latency_s": 0.726}

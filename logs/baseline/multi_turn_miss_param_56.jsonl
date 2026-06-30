@@ -1,4 +1,4 @@
-{"ts": 0.0, "type": "task_start", "task_id": "multi_turn_miss_param_56", "architecture": "baseline__run2", "involved_classes": ["VehicleControlAPI"], "n_turns": 4, "missed_function": {}}
+{"ts": 0.0, "type": "task_start", "task_id": "multi_turn_miss_param_56", "architecture": "baseline", "involved_classes": ["VehicleControlAPI"], "n_turns": 4, "missed_function": {}}
 {"ts": 0.001, "type": "user_turn", "turn_idx": 0, "messages": [{"role": "user", "content": "I'm setting off on a road trip and my departure point is sunny San Francisco. Could you determine the distance to help me plan my fuel stops on the way?"}]}
 {"ts": 0.001, "type": "llm_request", "turn_idx": 0, "step": 0, "model": "qwen3-next-80b-a3b-instruct", "n_messages": 2, "n_tools": 22}
 {"ts": 0.632, "type": "llm_response", "turn_idx": 0, "step": 0, "finish_reason": "stop", "content": "I'd be happy to help you plan your road trip from San Francisco. To determine the distance, I'll need to know your destination city. Could you please tell me where you're traveling to?", "tool_calls": null, "input_tokens": 2887, "output_tokens": 41, "latency_s": 0.631}

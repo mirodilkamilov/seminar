@@ -1,4 +1,4 @@
-{"ts": 0.0, "type": "task_start", "task_id": "multi_turn_miss_param_37", "architecture": "baseline__run2", "involved_classes": ["GorillaFileSystem"], "n_turns": 4, "missed_function": {}}
+{"ts": 0.0, "type": "task_start", "task_id": "multi_turn_miss_param_37", "architecture": "baseline", "involved_classes": ["GorillaFileSystem"], "n_turns": 4, "missed_function": {}}
 {"ts": 0.0, "type": "user_turn", "turn_idx": 0, "messages": [{"role": "user", "content": "Could you go to temp directory, and for each file in there, count the number of lines."}]}
 {"ts": 0.0, "type": "llm_request", "turn_idx": 0, "step": 0, "model": "qwen3-next-80b-a3b-instruct", "n_messages": 2, "n_tools": 18}
 {"ts": 0.616, "type": "llm_response", "turn_idx": 0, "step": 0, "finish_reason": "tool_calls", "content": "I'll help you navigate to the temp directory and count the number of lines in each file there.\n\nFirst, let me check if we're in the right location and navigate to the temp directory:\n\n", "tool_calls": [{"id": "chatcmpl-tool-828861a768bcb306", "name": "cd", "arguments": "{\"folder\": \"temp\"}"}], "input_tokens": 2903, "output_tokens": 58, "latency_s": 0.615}

@@ -1,4 +1,4 @@
-{"ts": 0.001, "type": "task_start", "task_id": "multi_turn_miss_param_77", "architecture": "baseline__run2", "involved_classes": ["TwitterAPI", "VehicleControlAPI"], "n_turns": 4, "missed_function": {}}
+{"ts": 0.001, "type": "task_start", "task_id": "multi_turn_miss_param_77", "architecture": "baseline", "involved_classes": ["TwitterAPI", "VehicleControlAPI"], "n_turns": 4, "missed_function": {}}
 {"ts": 0.001, "type": "user_turn", "turn_idx": 0, "messages": [{"role": "user", "content": "Before I set off for Stonebrook to uncover family history, I need to determine the road distance for my genealogy exploration."}]}
 {"ts": 0.001, "type": "llm_request", "turn_idx": 0, "step": 0, "model": "qwen3-next-80b-a3b-instruct", "n_messages": 2, "n_tools": 36}
 {"ts": 0.525, "type": "llm_response", "turn_idx": 0, "step": 0, "finish_reason": "stop", "content": "I can help you determine the road distance to Stonebrook. To do this, I'll need the zipcode of Stonebrook and your current location's zipcode. Could you please provide both zipcodes?", "tool_calls": null, "input_tokens": 4469, "output_tokens": 40, "latency_s": 0.524}

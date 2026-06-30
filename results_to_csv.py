@@ -100,7 +100,7 @@ def collect_rows():
 
 def write_tasks(rows, path):
     with open(path, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=TASK_COLUMNS)
+        w = csv.DictWriter(f, fieldnames=TASK_COLUMNS, lineterminator="\n")
         w.writeheader()
         w.writerows(rows)
 
@@ -128,7 +128,7 @@ def write_summary(rows, path):
         "max_steps_hits",
     ]
     with open(path, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=cols)
+        w = csv.DictWriter(f, fieldnames=cols, lineterminator="\n")
         w.writeheader()
         for (arch, cat), g in sorted(groups.items()):
             n = len(g)

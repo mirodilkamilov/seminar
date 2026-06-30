@@ -1,4 +1,4 @@
-{"ts": 0.001, "type": "task_start", "task_id": "multi_turn_miss_func_33", "architecture": "baseline", "involved_classes": ["MessageAPI", "GorillaFileSystem"], "n_turns": 6, "missed_function": {"4": ["message_login"]}}
+{"ts": 0.001, "type": "task_start", "task_id": "multi_turn_miss_func_33", "architecture": "baseline__run2", "involved_classes": ["MessageAPI", "GorillaFileSystem"], "n_turns": 6, "missed_function": {"4": ["message_login"]}}
 {"ts": 0.001, "type": "user_turn", "turn_idx": 0, "messages": [{"role": "user", "content": "What's the name of the python file my current directory? There should be only one and Do not list hidden files."}]}
 {"ts": 0.001, "type": "llm_request", "turn_idx": 0, "step": 0, "model": "qwen3-next-80b-a3b-instruct", "n_messages": 2, "n_tools": 27}
 {"ts": 0.715, "type": "llm_response", "turn_idx": 0, "step": 0, "finish_reason": "tool_calls", "content": "I'll help you find the Python file in your current directory. Let me list the files first to identify it.\n", "tool_calls": [{"id": "chatcmpl-tool-b536eb20d004f442", "name": "ls", "arguments": "{}"}], "input_tokens": 3705, "output_tokens": 38, "latency_s": 0.714}
