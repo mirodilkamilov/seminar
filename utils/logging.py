@@ -370,10 +370,7 @@ def pretty_print_log(path, printer=print, ground_truth=None) -> None:
             printer(f"[tool_result] {ev['result']}")
         elif t == "tools_revealed":
             names = ", ".join(ev.get("names", []))
-            printer(
-                f"[tools_revealed] {names} "
-                f"(now {ev.get('n_active_tools')} tools available)"
-            )
+            printer(f"[tools_revealed] {names}")
         elif t == "reflection":
             printer(f"[reflection] {ev.get('text', '')}")
         elif t == "max_steps_reached":

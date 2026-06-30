@@ -1,0 +1,40 @@
+task_id,baseline,baseline__run2,notes
+multi_turn_base_117,False,True,Confounder | BenchmarkIssue: solved via a synonymous function GT didn't pick (make_transaction vs. fund_account). See: gorilla/berkeley-function-call-leaderboard/bfcl_eval/data/multi_turn_func_doc/trading_bot.json
+multi_turn_base_140,True,False,"Confounder | BenchmarkIssue:first run is actually wrong but the second run is true. Benchmark's ground truth is not matched what the question was
+Q: Make sure to encapsulate the order details and craft a concise case summary with message 'Urgent assistance required.'
+model called:     create_ticket(title='Critical Order Assistance', description='Urgent assistance required. Order history includes: 12345, 12446', priority=5)
+expected:         create_ticket(title='Critical Order Assistance',description='Urgent assistance required.',priority=5)"
+multi_turn_base_190,False,True,GenuineError | IgnoredInstruction: Details be 'Detailed exchange with customer support regarding unexpected charge.' instead wrote whole email
+multi_turn_base_37,False,True,"Confounder | BenchmarkIssue: state IS correct — echo creates 1.txt with the content when the file is absent (gorilla/berkeley-function-call-leaderboard/bfcl_eval/eval_checker/multi_turn_eval/func_source_code/gorilla_file_system.py:371-372), so the state gate passes. The failure is the response gate (multi_turn:execution_response_mismatch): GT's redundant touch() returns None and the echo-only run is short exactly one None output."
+multi_turn_base_94,False,True,"GenuineError | CalledWrongTool:
+[tool_call] startEngine(ignitionMode='START')
+[tool_result] {""error"": ""Brake pedal needs to be pressed when starting the engine.""}
+[assistant] I see that the engine cannot be started because the parking brake is engaged. I'll need to release the parking brake first before starting the engine.
+[tool_call] activateParkingBrake(mode='release')
+[tool_result] {""parkingBrakeStatus"": ""released"", ""_parkingBrakeForce"": 0.0, ""_slopeAngle"": 10.0}
+[assistant] Now that the parking brake has been released, I'll start the engine for you.
+[tool_call] startEngine(ignitionMode='START')
+[tool_result] {""error"": ""Brake pedal needs to be pressed when starting the engine.""}
+
+vs.
+
+tool_call] startEngine(ignitionMode='START')
+[tool_result] {""error"": ""Brake pedal needs to be pressed when starting the engine.""}
+[assistant] I see that the engine can't be started because the brake pedal needs to be pressed first. Let me press the brake pedal and then try starting the engine again:
+[tool_call] pressBrakePedal(pedalPosition=1)
+[tool_result] {""brakePedalStatus"": ""pressed"", ""brakePedalForce"": 1000.0}
+[assistant] Now that the brake pedal is pressed, I'll try starting the engine again:
+[tool_call] startEngine(ignitionMode='START')
+[tool_result] {""engineState"": ""running"", ""fuelLevel"": 40.0, ""batteryVoltage"": 12.6}"
+multi_turn_long_context_1,True,False,"GenuineError | PlanExecuteConflation: run2 Turn 1 — model narrated 'I'll move the log.txt file into this existing archive directory' as a TEXT-ONLY message (finish_reason=stop, not a truncation) with no mv call, so the no-tool-call turn-end closed the turn before mv ran."
+multi_turn_long_context_117,True,False,GenuineError | DeclaresNoDataExistWithoutChecking
+multi_turn_long_context_153,True,False,GenuineError | AskedForConfirmation: Details exists in the context but still asked confirmation
+multi_turn_long_context_20,False,True,GenuineError | Hallucination: it should be company’s instead of company's
+multi_turn_long_context_3,False,True,"GenuineError | ToolCallFormatLeak: Turn 1 — model emitted the ls call as <tool_call> text instead of a native tool call, so no call was registered and the turn ended with 0 actions → FAIL."
+multi_turn_miss_func_153,True,False,GenuineError | AskedForConfirmation: Details exists in the context but still asked confirmation
+multi_turn_miss_func_77,True,False,"GenuineError | CannotReasonThrough: after tool revealed, estimate_distance(cityA='94016', cityB='74532') but get the zip codes first"
+multi_turn_miss_param_119,False,True,Confounder | BenchmarkIssue: close_ticket needs no login (only create_ticket gates on current_user) and tickets have no owner — anyone can close any ticket. Model's auth-check before closing is real-world-sound but the unrealistic tool penalizes it. GT just called close_ticket(3).
+multi_turn_miss_param_145,False,True,"Confounder | BenchmarkIssue: checked login status with symmetric function call message_login(user_id='1234') vs GD: message_get_login_status()
+Benchmark returned: {""login_status"": false, ""message"": ""User ID '1234' not found.""}
+But for message_get_login_status() it returned {""login_status"": true}"
+multi_turn_miss_param_153,False,True,GenuineError | AskedForConfirmation: Details exists in the context but still asked confirmation
