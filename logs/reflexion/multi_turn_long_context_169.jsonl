@@ -1,0 +1,3 @@
+{"ts": 0.0, "type": "attempt_start", "attempt": 1, "seeded": true, "seed_label": "baseline"}
+{"ts": 0.0, "type": "attempt_end", "attempt": 1, "passed": true, "error_type": null}
+{"ts": 0.0, "type": "task_end", "result": "pass", "error_message": null, "error_type": null, "stats": {"n_llm_calls": 7, "n_tool_calls": 5, "input_tokens": 42835, "output_tokens": 865, "peak_context": 7616, "latency_s": 10.80682054099998, "max_steps_hits": 0, "truncations": 0, "parse_errors": 0, "n_reflections": 0}, "elapsed_s": 0.0}
