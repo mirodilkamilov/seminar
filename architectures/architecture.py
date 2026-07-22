@@ -75,7 +75,8 @@ class Architecture(ABC):
         ``all_turns_calls`` has the shape ``list[list[list[str]]]``
         (turn → step → call strings) that ``multi_turn_checker`` expects.
         """
-        return self._run_fc_loop(task, tlog)
+        all_turns_calls, stats, _ = self._run_fc_loop(task, tlog)
+        return all_turns_calls, stats
 
     # ------------------------------------------------------------------
     # Shared loop
@@ -83,14 +84,17 @@ class Architecture(ABC):
 
     def _run_fc_loop(
         self, task: dict, tlog: TrajectoryLogger
-    ) -> tuple[list[list[list[str]]], dict]:
+    ) -> tuple[list[list[list[str]]], dict, list[dict]]:
+        """Returns ``(all_turns_calls, stats, messages)`` — the final message
+        list is exposed for architectures that reflect on the trajectory
+        (Reflexion); ``run_task`` drops it."""
         active_tools, held_out_tools, missed = self._setup_tools(task)
         # long_context category must match the grader's simulator scaffold.
         long_context = "long_context" in task["id"]
         system_prompt = self.system_prompt()
         tlog.task_start(task, system_prompt=system_prompt)
 
-        messages = [{"role": "system", "content": system_prompt}]
+        messages = self._initial_messages(system_prompt, tlog)
         all_turns_calls: list[list[list[str]]] = []
         stats = self._init_stats()
 
@@ -117,11 +121,21 @@ class Architecture(ABC):
             tlog.turn_end(turn_idx, n_steps=len(this_turn_calls))
             all_turns_calls.append(this_turn_calls)
 
-        return all_turns_calls, stats
+        return all_turns_calls, stats, messages
 
     # ------------------------------------------------------------------
     # Setup helpers
     # ------------------------------------------------------------------
+
+    def _initial_messages(
+        self, system_prompt: str, tlog: TrajectoryLogger
+    ) -> list[dict]:
+        """
+        Conversation prefix before the first task turn. Reflexion overrides
+        this to insert its retry preamble (a user message) between the system
+        message and turn 0; everything else keeps just the system message.
+        """
+        return [{"role": "system", "content": system_prompt}]
 
     @staticmethod
     def _setup_tools(task: dict) -> tuple[list[dict], dict[str, dict], dict]:

@@ -36,6 +36,10 @@ TASK_COLUMNS = [
     "category",
     "task_id",
     "passed",
+    "passed_at_1",
+    "passed_at",
+    "n_attempts",
+    "n_reflections",
     "n_turns",
     "involved_classes",
     "n_llm_calls",
@@ -82,6 +86,12 @@ def collect_rows():
                     "category": r.get("category", category),
                     "task_id": r["task_id"],
                     "passed": r["passed"],
+                    # Multi-attempt archs (reflexion/blind_retry) only; blank
+                    # elsewhere. `passed` is pass@k for those runs.
+                    "passed_at_1": r.get("passed_at_1"),
+                    "passed_at": r.get("passed_at"),
+                    "n_attempts": r.get("n_attempts"),
+                    "n_reflections": r.get("n_reflections"),
                     "n_turns": r.get("n_turns"),
                     "involved_classes": classes.get(r["task_id"], ""),
                     "n_llm_calls": r.get("n_llm_calls"),

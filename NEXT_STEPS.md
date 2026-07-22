@@ -23,8 +23,8 @@ Methodology is locked in `README.md`.
 - [x] **Freeze the task subset.** `python run_benchmark.py --make-subset` →
   `task_subset.json` (50/category, stratified by `involved_classes`, seed 42,
   verified 50 unique each). `utils/sampling.py`.
-- [ ] **Run the FC baseline over the full 200-task subset.** First real result.
-- [ ] **Baseline noise re-run.** Run the baseline a second time over the subset
+- [x] **Run the FC baseline over the full 200-task subset.** First real result.
+- [x] **Baseline noise re-run.** Run the baseline a second time over the subset
   (instances reset between passes); report the task-level flip rate as the
   noise band. (This is the only repeat — no `pass^k`.)
 
@@ -35,19 +35,32 @@ Methodology is locked in `README.md`.
   (loop hooks to be added for Reflexion/REBACT).
 - [x] **Implement ReAct** — zero-shot `Thought:` before each action via the
   shared loop; action through native FC. No exemplars. (`architectures/react.py`)
-- [ ] **Run ReAct over the subset**; paired comparison vs baseline per category.
+- [x] **Run ReAct over the subset**; paired comparison vs baseline per category.
 
-## Phase 3: Reflexion (episodic)
+## Phase 3: Reflexion (episodic) + blind-retry control
 
-- [ ] **Within-task multi-attempt loop**, `k=3`. On a failed attempt: reflect
-  (one LLM call), prepend reflection, retry. Attempt-1 prompt **identical to
-  baseline** so Reflexion@1 == baseline by construction.
-- [ ] **Sanitize the failure signal.** Feed back only which instance/attribute
-  mismatched (or binary fail) — **never** the grader's expected value (it leaks
-  ground truth). Note the oracle asymmetry explicitly.
-- [ ] **Fix the reflection prompt format** (e.g. `What I tried / What went wrong
-  / Lesson`); reuse for the vector-DB variant.
-- [ ] **Report Reflexion@1 and Reflexion@k.** @1→@k gap = value of reflection.
+- [x] **Within-task multi-attempt loop**, `k=3`, fresh-episode retries
+  (`architectures/reflexion.py` + `run_benchmark.py::run_one_multi`). Retry
+  opens with a `[user]` preamble before turn 0 (signal + reflection, "previous,
+  separate attempt", "restarts from the beginning"); system prompt = baseline's
+  on every attempt.
+- [x] **Attempt 1 seeded from baseline run 1** (always — hardcoded
+  `SEED_LABEL = "baseline"`, not configurable) — Reflexion@1 ≡ baseline by
+  identity; reflection reads the seeded trajectory via `utils/conversation.py`.
+- [x] **Sanitize the failure signal** (`utils/sanitize.py`): class + turn only,
+  never values — identical signal to both arms. Oracle asymmetry documented in
+  README.
+- [x] **Fix the reflection prompt format** (`What I tried / What went wrong /
+  Lesson`, `REFLECTION_PROMPT`); reuse for the vector-DB variant.
+- [x] **Blind-retry placebo arm** (`--arch blind_retry`): identical loop /
+  preamble / signal, fixed sham reflection, zero reflection LLM calls
+  (REVIEW.md §3.2).
+- [ ] **Run both arms over the subset**: `--arch reflexion`, then
+  `--arch blind_retry`. Sanity: blind arm's first retry should flip ≈7.8% of
+  failures.
+- [ ] **Report Reflexion@1, Reflexion@k, BlindRetry@k.**
+  Reflexion@k − BlindRetry@k = reflection content;
+  BlindRetry@k − @1 = retry luck + signal + framing (placebo term).
 
 ## Phase 4: Reflexion (vector DB) — main contribution
 

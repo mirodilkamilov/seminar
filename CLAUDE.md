@@ -251,22 +251,48 @@ list (`all_turns_calls`), not the live execution. So a rewind must edit **both**
 
 ### Reflexion adaptation to BFCL (within-task retries — distinct from trials)
 
-- **Episodic**: up to `k=3` sequential attempts per task; on a failed attempt,
-  reflect, prepend the reflection, retry. Report **Reflexion@1** (= the baseline,
-  definitionally — make attempt-1 prompt identical to baseline) and
-  **Reflexion@k**. The @1→@k gap = value of the reflection mechanism.
-- **Failure signal is an oracle and MUST be sanitized.** Reflexion retries
-  because it is told it failed — that signal is the BFCL grader. Two
-  non-negotiables: (1) state the asymmetry (baseline never sees this signal);
-  (2) **the grader's error message leaks the ground truth** (e.g. `base_70`
-  prints `ground_truth: "456 Oakwood Avenue…"`). Feed back only *which*
-  instance/attribute mismatched (or a binary fail) — **never the expected
-  value** — or Reflexion's result is invalid.
+Implemented (`architectures/reflexion.py` + `run_benchmark.py::run_one_multi`);
+design per REVIEW.md §3.2. Key mechanics:
+
+- **Episodic, `k=3`, fresh-episode retries.** The failed conversation never
+  enters the retry's context. A separate reflection call sees the failed
+  trajectory + sanitized signal and writes `What I tried / What went wrong /
+  Lesson`; the retry is a new conversation opening with a `[user]` preamble
+  **before turn 0** (never mid-task, never a system-prompt change) that says a
+  *previous, separate* attempt failed and the task *restarts from the
+  beginning*. System prompt = baseline's on every attempt.
+- **Blind-retry placebo arm** (`--arch blind_retry`): temp-0 is not
+  deterministic here (7.8% of failures flip on identical re-run), so @1→@k
+  alone conflates reflection value with retry luck. Identical loop, preamble
+  template and sanitized signal; the reflection slot holds a fixed **sham**
+  reflection-shaped text, no reflection LLM call.
+  Reflexion@k − BlindRetry@k = reflection content; BlindRetry@k − @1 = placebo.
+- **Attempt 1 seeded from baseline run 1** (always — hardcoded `SEED_LABEL`
+  in `run_benchmark.py`, deliberately not configurable):
+  verdict/stats from `results/baseline/`, trajectory rebuilt from
+  `logs/baseline/*.jsonl` (`utils/conversation.py` — baseline run-1 logs predate
+  the `system_prompt` field, so the caller passes the known prompt as a
+  fallback). Reflexion@1 ≡ baseline by identity; both arms retry the same
+  failure set.
+- **Failure signal is an oracle and MUST be sanitized**
+  (`utils/sanitize.py`). The leak is in the checker's `details` dict (e.g.
+  `ground_truth_instance_state`), which `grade()` already discards; the
+  sanitizer maps `error_type`/`error_message` to class + turn only (state gate
+  carries no turn index → class-level there), never values. Both arms get the
+  identical signal; state the baseline-never-sees-it asymmetry in the report.
+- **Reset per ATTEMPT, not per task** — `reset_bfcl_instances()` before every
+  live attempt: the grader caches `_eval`/ground-truth simulator instances in
+  module globals, so a second in-process `grade()` would otherwise resume
+  stale state.
+- **Cost accounting**: per-task totals sum all attempts *plus* reflection calls
+  (`n_reflections` counted; `peak_context` is a max across attempts, not a
+  sum). Results rows add `passed_at_1`, `n_attempts`, `attempts[]`.
 - **Vector-DB variant (the contribution)**: keep it a **single attempt per
-  task** plus top-k reflections retrieved from *past* tasks. Compare against
-  episodic **Reflexion@1** (single attempt, no memory) to isolate the value of
-  persistent cross-task memory. Fix and document task order; report the
-  learning curve (pass rate vs. position in the sequence as memory fills).
+  task** plus top-k reflections retrieved from *past* tasks (immune to the
+  retry-luck confound — no lottery). Compare against episodic **Reflexion@1**
+  (single attempt, no memory) to isolate the value of persistent cross-task
+  memory. Fix and document task order; report the learning curve (pass rate
+  vs. position in the sequence as memory fills). Reuse `REFLECTION_PROMPT`.
 
 ## Open questions / TBD
 

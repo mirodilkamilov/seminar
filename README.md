@@ -109,13 +109,35 @@ meaningful if everything *except* the reasoning scaffold is held constant — se
 ### Architecture-specific adaptations
 
 - **Reflexion (episodic)** does up to `k=3` *within-task* attempts (this is the
-  architecture's mechanism — distinct from the dropped cross-run trials). We
-  report **Reflexion@1** (= baseline, by definition) and **Reflexion@k**; the
-  gap is the value of the reflection mechanism. The failure signal between
-  attempts comes from the grader and is an **oracle the baseline never sees** —
-  we state this asymmetry, and we **sanitize** the feedback: the grader's error
-  message leaks the ground-truth value (e.g. an expected address), so we feed
-  back only *which* instance/attribute mismatched, never the expected value.
+  architecture's mechanism — distinct from the dropped cross-run trials).
+  Design, following REVIEW.md §3.2:
+  - **Retries are fresh-episode.** The failed conversation never enters the
+    retry's context. A separate reflection LLM call — which *does* see the full
+    failed trajectory plus the sanitized failure signal — distills a portable
+    lesson; the retry opens with a `[user]` preamble (before turn 0, never
+    mid-task, never a system-prompt change) carrying the signal + lesson and
+    stating that a *previous, separate* attempt failed and the task *restarts
+    from the beginning*.
+  - **Attempt 1 is seeded from baseline run 1** (verdict, cost and — on
+    failure — the trajectory are reused from `results/` + `logs/`), so
+    **Reflexion@1 ≡ baseline by identity** and the compute goes to the retries.
+  - **Blind-retry control (the placebo arm).** Retrying is a lottery even with
+    an empty reflection: temperature-0 is not deterministic on this endpoint
+    (7.8% of baseline failures flipped to pass on an identical re-run), so the
+    raw @1→@k gap conflates reflection value with retry luck. `blind_retry`
+    runs the identical loop, preamble template and sanitized signal, but fills
+    the reflection slot with a fixed, generic, reflection-*shaped* **sham**
+    text. The two subtractions then separate the ingredients:
+    **Reflexion@k − BlindRetry@k** = value of the reflection *content*;
+    **BlindRetry@k − @1** = retry luck + failure-signal + framing effects.
+    (Free sanity check: the blind arm's first retry should flip ≈7.8% of
+    failures.)
+  - The failure signal between attempts comes from the grader and is an
+    **oracle the baseline never sees** — we state this asymmetry, and we
+    **sanitize** it (`utils/sanitize.py`): the grader's raw output leaks the
+    ground truth, so both arms see only *which* environment class mismatched
+    or *which* turn went wrong (class + turn; never values, never which call
+    was expected) — identical signal in both arms.
 - **Reflexion (vector DB)** stays a **single attempt per task** plus retrieved
   cross-task reflections, compared against episodic Reflexion@1 to isolate the
   value of *persistent* memory. Task order is fixed and we plot the learning
@@ -149,7 +171,8 @@ five-way ranking as *illustrative*:
 | Compare…                                  | …isolates                                                                       | Clean?                                                                                         |
 |-------------------------------------------|---------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|
 | Baseline → ReAct                          | pure added thinking, nothing else changes                                       | ✅ fully clean                                                                                  |
-| Reflexion@1 → Reflexion@k                 | value of reflecting-after-failure                                               | ✅ clean (same architecture)                                                                    |
+| BlindRetry@k → Reflexion@k                | value of the reflection *content* (net of retry luck, failure signal, framing) | ✅ clean — the placebo arm differs only in whether the lesson is task-specific                 |
+| Reflexion@1 → BlindRetry@k                | the placebo term: retry luck + failure-signal + framing                         | ✅ clean (its luck floor is the measured 7.8% noise flip rate)                                 |
 | Reflexion-episodic@1 → Reflexion-vectorDB | value of *persistent* cross-task memory                                         | ✅ clean                                                                                        |
 | ReAct → REBACT                            | *where* in the loop reflection sits (reason-before-act vs reflect-after-result) | ◐ same info, no oracle; only confound is the undo — we **measure the rewind rate** as its size |
 | ReAct vs REBACT vs Reflexion (absolute)   | "which idea wins overall"                                                       | ⚠️ confounded by oracle / undo                                                                 |

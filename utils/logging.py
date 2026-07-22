@@ -371,8 +371,21 @@ def pretty_print_log(path, printer=print, ground_truth=None) -> None:
         elif t == "tools_revealed":
             names = ", ".join(ev.get("names", []))
             printer(f"[tools_revealed] {names}")
+        elif t == "attempt_start":
+            seeded = ""
+            if ev.get("seeded"):
+                seeded = f" (seeded from '{ev.get('seed_label')}' — not re-run)"
+            printer(f"\n═══ Attempt {ev['attempt']}{seeded} ═══")
+        elif t == "attempt_end":
+            verdict = "PASS" if ev.get("passed") else f"FAIL — {ev.get('error_type')}"
+            printer(f"═══ Attempt {ev['attempt']} ended: {verdict} ═══")
+        elif t == "retry_context":
+            printer(f"[retry context] {ev.get('text')}")
         elif t == "reflection":
-            printer(f"[reflection] {ev.get('text', '')}")
+            if ev.get("signal"):
+                printer(f"[failure signal] {ev['signal']}")
+            sham = " (sham)" if ev.get("sham") else ""
+            printer(f"[reflection{sham}] {ev.get('text', '')}")
         elif t == "max_steps_reached":
             printer(f"⚠ MAX_STEPS_PER_TURN reached on turn {ev['turn_idx']}")
         elif t == "truncated":
