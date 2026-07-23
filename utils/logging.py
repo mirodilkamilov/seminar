@@ -384,7 +384,11 @@ def pretty_print_log(path, printer=print, ground_truth=None) -> None:
         elif t == "reflection":
             if ev.get("signal"):
                 printer(f"[failure signal] {ev['signal']}")
-            sham = " (sham)" if ev.get("sham") else ""
+            # Name the control rung, so the sham variant is visible when
+            # eyeballing a trajectory (older logs predate the field).
+            sham = f" (sham: {ev['sham_variant']})" if ev.get("sham_variant") else (
+                " (sham)" if ev.get("sham") else ""
+            )
             printer(f"[reflection{sham}] {ev.get('text', '')}")
         elif t == "max_steps_reached":
             printer(f"⚠ MAX_STEPS_PER_TURN reached on turn {ev['turn_idx']}")

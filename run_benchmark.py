@@ -22,7 +22,7 @@ from pathlib import Path
 
 from architectures.baseline import Baseline
 from architectures.react import ReAct
-from architectures.reflexion import BlindRetry, ReflexionEpisodic
+from architectures.reflexion import BlindRetry, BlindRetryLite, ReflexionEpisodic
 from bfcl_eval.eval_checker.multi_turn_eval.multi_turn_checker import (
     multi_turn_checker,
     multi_turn_irrelevance_checker,
@@ -37,7 +37,8 @@ from utils.conversation import log_to_messages, messages_to_text
 
 # Architecture registry: --arch <key>
 ARCHITECTURES = {
-    cls.name: cls for cls in (Baseline, ReAct, ReflexionEpisodic, BlindRetry)
+    cls.name: cls
+    for cls in (Baseline, ReAct, ReflexionEpisodic, BlindRetry, BlindRetryLite)
 }
 
 RESULTS_ROOT = Path("results")
