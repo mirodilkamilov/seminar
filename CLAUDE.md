@@ -55,19 +55,28 @@ re-roll), so the `@1 → @k` gap conflates reflection value with retry luck. The
 controls decompose it into a **ladder**, and **every rung is reported** — they
 are not alternatives to choose between (§3.2.4 Decision 1):
 
-| rung            | arm                | adds                                         |
-|-----------------|--------------------|----------------------------------------------|
-| `@1`            | —                  | no retry                                     |
-| plain re-run    | `baseline__run2`   | retry luck                                   |
-| minimal advice  | `blind_retry_lite` | + sanitized signal + reflection-shaped slot  |
-| specific advice | `blind_retry`      | + generic corrective imperatives             |
-| task-specific   | `reflexion`        | + a lesson distilled from the actual failure |
+| rung            | arm                | adds                                         | pass@3  |
+|-----------------|--------------------|----------------------------------------------|---------|
+| `@1`            | —                  | no retry                                     | 85/200  |
+| plain re-run    | `baseline__run2`   | retry luck (7.8%/retry, measured 30 Jun)     | —       |
+| minimal advice  | `blind_retry_lite` | + sanitized signal + reflection-shaped slot  | 102/200 |
+| specific advice | `blind_retry`      | + generic corrective imperatives             | 103/200 |
+| task-specific   | `reflexion`        | + a lesson distilled from the actual failure | 100/200 |
 
-`blind_retry` is the **primary** control (only it and `reflexion` have the full
-200-task history); `blind_retry_lite` bounds how much of its performance came
-from the advice content rather than the retry. Both are *active* controls, not
-placebos — the sham contains real generic advice — so never call them placebos
-in the report.
+`blind_retry` is the **primary** control; `blind_retry_lite` ablates its advice
+clauses. **The ablation came back inert** (+0.5pp, CI [−1.0, +2.5]; three of
+four categories identical task-for-task) — so the advice content contributes
+≈ 0, and the headline is unchanged whichever control is used (`reflexion` −
+`blind_retry` = −1.5pp; − `blind_retry_lite` = −1.0pp). Call them
+**sham-reflection controls**; "placebo" is wrong (the arms *do* beat a plain
+re-run, 12.2% vs 7.8%) and so is "generic-advice control" (the advice is the
+one part measured to do nothing). The 4.4pp they gain over a plain re-run
+belongs to the reflection-shaped slot + sanitized signal + retry framing.
+
+`blind_retry_lite` doubles as a **contemporaneous minimal-perturbation noise
+band**: two conditions differing by 69 prompt characters disagree on 3/200
+tasks, versus 15/200 for `reflexion` vs `blind_retry`. Use it — not the 30 Jun
+baseline re-run — as the ruler for the retry arms.
 
 ### Cross-architecture fairness invariants (must hold for every arm)
 
@@ -316,10 +325,10 @@ design per REVIEW.md §3.2. Key mechanics:
   luck. Identical loop, preamble template and sanitized signal; the reflection
   slot holds a fixed **sham** reflection-shaped text, no reflection LLM call.
   Reflexion@k − BlindRetry@k = reflection content; BlindRetry@k − @1 = the
-  retry+framing term. **They are *active* controls, not placebos** — the sham
-  carries real generic advice, so the subtraction estimates "task-specific
-  reflection vs generic advice". `blind_retry_lite` strips the advice clauses to
-  bound that; report **both rungs**, never one selected on outcome.
+  retry+framing term. `blind_retry_lite` strips the sham's advice clauses;
+  **the ablation came back inert**, so the advice content is not a confounder
+  and the miss_param −10pp attributes to Reflexion's lessons actively hurting.
+  Report **both rungs**, never one selected on outcome.
 - **`k=2` is the primary contrast, `k=3` secondary and caveated** (REVIEW.md
   §3.2.4 Decision 3). At attempt 3 `_retry_preamble` gives the blind arms the
   *verbatim identical* sham twice while Reflexion gets two distinct lessons, so
@@ -380,6 +389,36 @@ Two hazards, both confirmed against BFCL source:
    turn → step), rebuild the baseline call list, and run `grade()` on the
    seeded attempt too. Zero LLM cost, and it yields a free integrity check:
    assert the replayed verdict equals the seed row's `passed`.
+
+3. **Dump the DIFF against `initial_config`, never the absolute state.**
+   Measured over the frozen subset: **71% of public attributes are untouched by
+   the ground-truth trajectory** even when restricted to classes the task
+   actually exercised (77.5% over all involved classes; per class, touched-only:
+   TravelAPI 83%, VehicleControlAPI 74%, TradingBot 77%, TwitterAPI 68%,
+   GorillaFileSystem 50%, MessageAPI 45%, TicketAPI 28%; MathAPI is stateless
+   and never appears). Worse, **103/336 (31%) of (task, class) pairs are never
+   touched at all** and 88/200 tasks carry an entirely-untouched involved class.
+
+   That inert surface is an active distractor: an auth-shaped flag the task
+   never needed (`TicketAPI.current_user=None`, `TwitterAPI.authenticated=False`)
+   appears in **16 of the 115 attempt-1 failures**. `miss_param_119` is the worst
+   case — its existing reflection already wrongly blames authentication, and a
+   raw dump would appear to confirm it (see [[ticketapi-close-needs-no-login]]).
+
+   The diff fixes this by construction: auth-trap flags 28 → **4**, median dump
+   1,011 → **304** chars, p90 6,504 → 2,144. Still the agent's own product, so
+   the leak argument is unaffected. Keep a length cap anyway — the max barely
+   moves (16,359 → 16,337 on `long_context_3`, whose GT genuinely rewrites a
+   large filesystem). Note the 15 tasks whose GT mutates nothing: an empty diff
+   is *expected* there and diagnoses nothing, so don't word the prompt as though
+   state is always the culprit.
+
+   **Implemented in `utils/state_dump.py` (cap = 2,000 chars).** The above is on
+   GT trajectories; the arm diffs the *model's* state, which for a failing model
+   is usually smaller. Measured over the 115 attempt-1 failures: 77 real diffs
+   (median 291, max 1,390 chars), 33 empty (mostly under-acting miss_func/
+   miss_param — "you changed nothing" is the right signal there), 5 oversized →
+   sentinel, all `long_context`. Leak guard is an `assert`, not a comment.
 
 ## Open questions / TBD
 

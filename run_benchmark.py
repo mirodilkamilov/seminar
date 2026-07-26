@@ -22,7 +22,12 @@ from pathlib import Path
 
 from architectures.baseline import Baseline
 from architectures.react import ReAct
-from architectures.reflexion import BlindRetry, BlindRetryLite, ReflexionEpisodic
+from architectures.reflexion import (
+    BlindRetry,
+    BlindRetryLite,
+    ReflexionEpisodic,
+    RicherReflexion,
+)
 from bfcl_eval.eval_checker.multi_turn_eval.multi_turn_checker import (
     multi_turn_checker,
     multi_turn_irrelevance_checker,
@@ -33,12 +38,20 @@ from utils.executor import reset_bfcl_instances
 from utils.logging import TrajectoryLogger, pretty_print_log
 from utils.sampling import freeze_subset, load_subset, stratified_sample
 from utils.sanitize import sanitize_failure_signal
-from utils.conversation import log_to_messages, messages_to_text
+from utils.conversation import log_to_calls, log_to_messages, messages_to_text
+from utils.state_dump import state_diff_string
 
 # Architecture registry: --arch <key>
 ARCHITECTURES = {
     cls.name: cls
-    for cls in (Baseline, ReAct, ReflexionEpisodic, BlindRetry, BlindRetryLite)
+    for cls in (
+        Baseline,
+        ReAct,
+        ReflexionEpisodic,
+        BlindRetry,
+        BlindRetryLite,
+        RicherReflexion,
+    )
 }
 
 RESULTS_ROOT = Path("results")
@@ -234,7 +247,30 @@ def run_one_multi(arch, task, answer, category, label, seed_row):
                         default_system_prompt=arch.system_prompt(),
                     )
                 attempt_text = messages_to_text(messages)
-            reflection = arch.reflect(attempt_text, signal, attempt, tlog, overhead)
+
+            # richer_reflexion only: the model's own final-state diff, as a
+            # capped diff vs initial_config (utils/state_dump). Leak-free — it is
+            # the agent's product, never the ground truth. For a live attempt the
+            # just-run grade() left the model `_eval` instances in place; for the
+            # seeded attempt-1 failure grade() was skipped, so replay the baseline
+            # calls (zero LLM cost) to repopulate them and check the replayed
+            # verdict matches the seed row.
+            state_diff = None
+            if getattr(arch, "uses_state", False):
+                if seeded:  # replay the calls from the seeded log [first time]
+                    seed_calls = log_to_calls(seed_log_path(task["id"]))
+                    reset_bfcl_instances()
+                    replayed, _, _ = grade(seed_calls, answer, task, category)
+                    assert replayed == passed, (
+                        f"seed replay verdict {replayed} != seed row {passed} for "
+                        f"{task['id']} — logs/{SEED_LABEL} and results/{SEED_LABEL} "
+                        f"are out of sync"
+                    )
+                state_diff = state_diff_string(task)
+
+            reflection = arch.reflect(
+                attempt_text, signal, attempt, tlog, overhead, state_diff
+            )
             memory.append(
                 {"attempt": attempt, "signal": signal, "reflection": reflection}
             )

@@ -93,6 +93,49 @@ def log_to_messages(log_path, default_system_prompt: str | None = None) -> list[
     return messages
 
 
+def log_to_calls(log_path) -> list[list[list[str]]]:
+    """
+    Reconstruct the graded call list of a *single-attempt* run from its
+    TrajectoryLogger jsonl, in the ``list[list[list[str]]]`` (turn → step →
+    call strings) shape ``multi_turn_checker`` expects — the same object
+    ``_run_fc_loop`` accumulates live as ``all_turns_calls``.
+
+    Used to re-grade the seeded attempt-1 failure in ``richer_reflexion``: the
+    runner skips ``grade()`` for a seeded attempt, so there are no ``_eval``
+    simulator instances to dump. Rebuilding the baseline call list and grading
+    it repopulates them (zero LLM cost) and reproduces the seed verdict.
+
+    One entry per turn (empty list for turns with no calls), so per-turn
+    alignment with the ground truth is preserved. Multi-attempt logs (more than
+    one ``task_start``) are rejected, matching ``log_to_messages``.
+    """
+    with open(log_path, encoding="utf-8") as fh:
+        events = [json.loads(line) for line in fh if line.strip()]
+
+    if sum(e["type"] == "task_start" for e in events) > 1:
+        raise ValueError(
+            f"{log_path} is a multi-attempt log; cannot reconstruct one call list"
+        )
+
+    # turn_idx -> step -> ordered call strings, then flattened per turn.
+    per_turn: dict[int, dict[int, list[str]]] = {}
+    n_turns = 0
+    for event in events:
+        t = event["type"]
+        if t == "turn_end":
+            n_turns = max(n_turns, event["turn_idx"] + 1)
+        elif t == "tool_call":
+            turn = per_turn.setdefault(event["turn_idx"], {})
+            turn.setdefault(event["step"], []).append(event["call_str"])
+            n_turns = max(n_turns, event["turn_idx"] + 1)
+
+    calls: list[list[list[str]]] = []
+    for turn_idx in range(n_turns):
+        steps = per_turn.get(turn_idx, {})
+        calls.append([steps[s] for s in sorted(steps)])
+    return calls
+
+
 def messages_to_text(messages: list[dict]) -> str:
     """Plain-text rendering of a message list, for the reflection call."""
     lines = []

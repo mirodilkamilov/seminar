@@ -384,6 +384,8 @@ def pretty_print_log(path, printer=print, ground_truth=None) -> None:
         elif t == "reflection":
             if ev.get("signal"):
                 printer(f"[failure signal] {ev['signal']}")
+            if ev.get("state_diff") is not None:
+                printer(f"[state diff] {ev['state_diff']}")
             # Name the control rung, so the sham variant is visible when
             # eyeballing a trajectory (older logs predate the field).
             sham = f" (sham: {ev['sham_variant']})" if ev.get("sham_variant") else (

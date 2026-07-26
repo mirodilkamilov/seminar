@@ -84,6 +84,28 @@ REFLECTION_PROMPT = (
     "the reflection itself. Make the Lesson self-contained."
 )
 
+# Richer-signal variant (the `richer_reflexion` contribution). BYTE-IDENTICAL to
+# REFLECTION_PROMPT except for the inserted state block, so the
+# richer − plain contrast is a single manipulation (the state signal), not a
+# prompt rewrite. The wording is deliberately neutral — the diff *may* be empty
+# and diagnose nothing (15 tasks have a ground truth that mutates no state), so
+# it must not assert that state is always the cause of failure.
+REFLECTION_PROMPT_RICH = (
+    "Below is the full transcript of your previous attempt at a multi-turn "
+    "tool-calling task. The attempt was graded as FAILED.\n\n"
+    "{attempt_text}\n\n"
+    "Grader failure signal: {signal}\n\n"
+    "For reference, here is how your own actions changed the environment "
+    "state, relative to its starting state:\n{state}\n\n"
+    "Reflect on this failed attempt. Reply in exactly this format:\n"
+    "What I tried: <one or two sentences>\n"
+    "What went wrong: <one or two sentences — your best diagnosis, using the "
+    "failure signal>\n"
+    "Lesson: <one or two sentences of concrete, actionable guidance>\n\n"
+    "Whoever reads this reflection later will not see this transcript — only "
+    "the reflection itself. Make the Lesson self-contained."
+)
+
 
 def _retry_preamble(memory: list[dict]) -> str:
     """The user message a retry opens with — identical template in every arm,
@@ -111,6 +133,9 @@ class ReflexionEpisodic(Architecture):
     # True → reflect() makes an LLM call over the failed trajectory.
     # The blind controls override this to use their fixed sham text.
     writes_reflections = True
+    # True → the runner computes the model's own final-state diff and passes it
+    # to reflect(). Only richer_reflexion consumes it; everyone else ignores it.
+    uses_state = False
 
     def __init__(self):
         self._memory: list[dict] = []  # set per attempt via run_attempt
@@ -154,12 +179,16 @@ class ReflexionEpisodic(Architecture):
         attempt: int,
         tlog: TrajectoryLogger,
         stats: dict,
+        state_diff: str | None = None,
     ) -> str:
         """One reflection LLM call over the failed transcript. No tools; same
         temperature/max_tokens as the loop. Cost accumulates into ``stats`` —
         the cost axis has to include reflection overhead. Not an action step,
-        so it never consumes MAX_STEPS_PER_TURN budget."""
-        prompt = REFLECTION_PROMPT.format(attempt_text=attempt_text, signal=signal)
+        so it never consumes MAX_STEPS_PER_TURN budget. ``state_diff`` is unused
+        by the base prompt; ``RicherReflexion`` folds it in via
+        ``_reflection_prompt``. It is in the signature so the runner has one
+        uniform call site across arms."""
+        prompt = self._reflection_prompt(attempt_text, signal, state_diff)
         response, latency = call_with_retry(
             client,
             model=MODEL,
@@ -191,11 +220,43 @@ class ReflexionEpisodic(Architecture):
             # rebuild path (log_to_messages → messages_to_text) nothing else
             # exercises, so the log must show what the reflector actually saw.
             prompt=prompt,
+            # None for plain reflexion; the capped diff for richer_reflexion.
+            state_diff=state_diff,
             input_tokens=usage.prompt_tokens if usage else None,
             output_tokens=usage.completion_tokens if usage else None,
             latency_s=round(latency, 3),
         )
         return text
+
+    def _reflection_prompt(
+        self, attempt_text: str | None, signal: str, state_diff: str | None
+    ) -> str:
+        """The reflection call's prompt. Override point: ``RicherReflexion``
+        swaps in the state-bearing template. Base ignores ``state_diff``."""
+        return REFLECTION_PROMPT.format(attempt_text=attempt_text, signal=signal)
+
+
+class RicherReflexion(ReflexionEpisodic):
+    """Own contribution. Identical to episodic Reflexion in every respect
+    (k=3, fresh-episode, seeded attempt 1, same preamble) except the reflection
+    call also sees the model's own final environment state, as a capped diff
+    against ``initial_config`` (``utils/state_dump.state_diff_string``). The
+    diff is the agent's product, never the ground truth, so it is leak-free by
+    construction. ``richer_reflexion − reflexion`` is a clean single-manipulation
+    contrast: both retry, both reflect, differing only in signal richness."""
+
+    name = "richer_reflexion"
+    uses_state = True  # runner computes the diff and passes it to reflect()
+
+    def _reflection_prompt(self, attempt_text, signal, state_diff):
+        # state_diff is always supplied by the runner for this arm; guard with a
+        # neutral fallback so a plumbing bug degrades to plain reflexion rather
+        # than crashing mid-run.
+        return REFLECTION_PROMPT_RICH.format(
+            attempt_text=attempt_text,
+            signal=signal,
+            state=state_diff or "(state unavailable)",
+        )
 
 
 class BlindRetry(ReflexionEpisodic):
@@ -210,9 +271,10 @@ class BlindRetry(ReflexionEpisodic):
     # ladder rung — never edit a frozen constant in place.
     sham_text = SHAM_REFLECTION
 
-    def reflect(self, attempt_text, signal, attempt, tlog, stats):
+    def reflect(self, attempt_text, signal, attempt, tlog, stats, state_diff=None):
         # No LLM call: the sham is a constant, so it costs nothing and cannot
-        # contain task-specific information.
+        # contain task-specific information. state_diff is accepted (uniform
+        # call site) and ignored — the blind arms never use state.
         tlog.event(
             "reflection",
             attempt=attempt,
