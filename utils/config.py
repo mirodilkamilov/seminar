@@ -10,6 +10,7 @@ import os
 import sys
 from pathlib import Path
 
+import httpx
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -38,9 +39,20 @@ MAX_STEPS_PER_TURN = 30  # caps runaway loops only; cap-hits are logged
 
 
 def get_client() -> OpenAI:
-    """Construct an OpenAI client pointed at the FIM endpoint."""
+    """Construct an OpenAI client pointed at the FIM endpoint.
+
+    An explicit per-request timeout is essential: without one a dead/stalled
+    connection to the shared university endpoint blocks the whole run forever
+    (observed 26 Jul — a 38-min hang mid-run with the client stuck reading one
+    socket).
+    """
     load_dotenv()
-    return OpenAI(api_key=os.environ["FIM_API_KEY"], base_url=BASE_URL)
+    return OpenAI(
+        api_key=os.environ["FIM_API_KEY"],
+        base_url=BASE_URL,
+        timeout=httpx.Timeout(180.0, connect=10.0),
+        max_retries=0,
+    )
 
 
 client = get_client()

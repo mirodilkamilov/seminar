@@ -37,6 +37,7 @@ from architectures.architecture import Architecture
 from utils.config import MODEL, client
 from utils.logging import TrajectoryLogger
 from utils.retry import call_with_retry
+from utils.state_dump import state_timeline_string
 
 # Sham reflection for `blind_retry`. Form-matched to REFLECTION_PROMPT's output
 # — same three headings, comparable length — so the arms differ only in whether
@@ -84,19 +85,20 @@ REFLECTION_PROMPT = (
     "the reflection itself. Make the Lesson self-contained."
 )
 
-# Richer-signal variant (the `richer_reflexion` contribution). BYTE-IDENTICAL to
-# REFLECTION_PROMPT except for the inserted state block, so the
-# richer − plain contrast is a single manipulation (the state signal), not a
-# prompt rewrite. The wording is deliberately neutral — the diff *may* be empty
-# and diagnose nothing (15 tasks have a ground truth that mutates no state), so
-# it must not assert that state is always the cause of failure.
-REFLECTION_PROMPT_RICH = (
+
+# Turnwise variant (`richer_reflexion_turnwise`). BYTE-IDENTICAL to
+# REFLECTION_PROMPT_RICH except the clause naming the block's structure
+# ("turn by turn" vs "relative to its starting state"), so
+# turnwise − richer is a single manipulation: same signal, same availability
+# (both degrade to the *same* sentinel on the same tasks — measured, 0/115
+# disagreements), differing only in whether changes are attributed to turns.
+REFLECTION_PROMPT_TIMELINE = (
     "Below is the full transcript of your previous attempt at a multi-turn "
     "tool-calling task. The attempt was graded as FAILED.\n\n"
     "{attempt_text}\n\n"
     "Grader failure signal: {signal}\n\n"
     "For reference, here is how your own actions changed the environment "
-    "state, relative to its starting state:\n{state}\n\n"
+    "state, turn by turn:\n{state}\n\n"
     "Reflect on this failed attempt. Reply in exactly this format:\n"
     "What I tried: <one or two sentences>\n"
     "What went wrong: <one or two sentences — your best diagnosis, using the "
@@ -235,24 +237,35 @@ class ReflexionEpisodic(Architecture):
         swaps in the state-bearing template. Base ignores ``state_diff``."""
         return REFLECTION_PROMPT.format(attempt_text=attempt_text, signal=signal)
 
+    def build_state_signal(
+        self, task: dict, model_calls: list[list[list[str]]]
+    ) -> str | None:
+        """The state block for this arm's reflection prompt, or ``None`` for
+        arms that use no state. Override point — the runner calls this once per
+        failed attempt and hands the result to ``reflect``, so a new state
+        variant is a subclass here rather than a branch in the runner."""
+        return None
 
-class RicherReflexion(ReflexionEpisodic):
+
+class TurnwiseRicherReflexion(ReflexionEpisodic):
     """Own contribution. Identical to episodic Reflexion in every respect
     (k=3, fresh-episode, seeded attempt 1, same preamble) except the reflection
-    call also sees the model's own final environment state, as a capped diff
-    against ``initial_config`` (``utils/state_dump.state_diff_string``). The
-    diff is the agent's product, never the ground truth, so it is leak-free by
-    construction. ``richer_reflexion − reflexion`` is a clean single-manipulation
-    contrast: both retry, both reflect, differing only in signal richness."""
+    call also sees the model's own **per-turn timeline** (what each turn changed,
+    relative to the turn before) rather than one net diff against ``initial_config``.
 
-    name = "richer_reflexion"
-    uses_state = True  # runner computes the diff and passes it to reflect()
+    ``turnwise − richer`` is a single-manipulation contrast. Both arms retry,
+    both reflect, both receive a state block, and the block degrades to the
+    same sentinel on the same tasks. Only the attribution differs.
+    """
+
+    name = "richer_reflexion_turnwise"
+    uses_state = True  # runner re-grades the seeded attempt for the integrity check
+
+    def build_state_signal(self, task, model_calls):
+        return state_timeline_string(task, model_calls)
 
     def _reflection_prompt(self, attempt_text, signal, state_diff):
-        # state_diff is always supplied by the runner for this arm; guard with a
-        # neutral fallback so a plumbing bug degrades to plain reflexion rather
-        # than crashing mid-run.
-        return REFLECTION_PROMPT_RICH.format(
+        return REFLECTION_PROMPT_TIMELINE.format(
             attempt_text=attempt_text,
             signal=signal,
             state=state_diff or "(state unavailable)",

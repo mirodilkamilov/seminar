@@ -177,11 +177,11 @@ def main():
         groups[(r["architecture"], r["category"])].append(r)
     print(f"{len(rows)} task rows  ->  {tasks_csv}")
     print(f"{len(groups)} (arch, category) groups  ->  {summary_csv}\n")
-    print(f"{'architecture':<18}{'category':<14}{'pass':>8}   {'rate':>5}")
-    print("-" * 50)
+    print(f"{'architecture':<30}{'category':<14}{'pass':>8}   {'rate':>5}")
+    print("-" * 62)
     for (arch, cat), g in sorted(groups.items()):
         n_pass = sum(bool(r["passed"]) for r in g)
-        print(f"{arch:<18}{cat:<14}{n_pass:>4}/{len(g):<3}   {n_pass / len(g):>4.0%}")
+        print(f"{arch:<30}{cat:<14}{n_pass:>4}/{len(g):<3}   {n_pass / len(g):>4.0%}")
 
 
 if __name__ == "__main__":

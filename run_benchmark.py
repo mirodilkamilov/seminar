@@ -26,7 +26,7 @@ from architectures.reflexion import (
     BlindRetry,
     BlindRetryLite,
     ReflexionEpisodic,
-    RicherReflexion,
+    TurnwiseRicherReflexion,
 )
 from bfcl_eval.eval_checker.multi_turn_eval.multi_turn_checker import (
     multi_turn_checker,
@@ -39,7 +39,6 @@ from utils.logging import TrajectoryLogger, pretty_print_log
 from utils.sampling import freeze_subset, load_subset, stratified_sample
 from utils.sanitize import sanitize_failure_signal
 from utils.conversation import log_to_calls, log_to_messages, messages_to_text
-from utils.state_dump import state_diff_string
 
 # Architecture registry: --arch <key>
 ARCHITECTURES = {
@@ -50,7 +49,7 @@ ARCHITECTURES = {
         ReflexionEpisodic,
         BlindRetry,
         BlindRetryLite,
-        RicherReflexion,
+        TurnwiseRicherReflexion,
     )
 }
 
@@ -207,7 +206,10 @@ def run_one_multi(arch, task, answer, category, label, seed_row):
                 tlog.event(
                     "attempt_start", attempt=attempt, seeded=True, seed_label=SEED_LABEL
                 )
-                messages = None  # rebuilt lazily from the seed log
+                # Nothing was executed this attempt; both are rebuilt from the
+                # seed log below, and only if something actually needs them.
+                messages = None
+                calls: list[list[list[str]]] = []
             else:
                 # Run attempt after reflection text is available
                 reset_bfcl_instances()
@@ -248,25 +250,29 @@ def run_one_multi(arch, task, answer, category, label, seed_row):
                     )
                 attempt_text = messages_to_text(messages)
 
-            # richer_reflexion only: the model's own final-state diff, as a
-            # capped diff vs initial_config (utils/state_dump). Leak-free — it is
-            # the agent's product, never the ground truth. For a live attempt the
-            # just-run grade() left the model `_eval` instances in place; for the
-            # seeded attempt-1 failure grade() was skipped, so replay the baseline
-            # calls (zero LLM cost) to repopulate them and check the replayed
-            # verdict matches the seed row.
+            # richer_reflexion_turnwise only: the model's own per-turn timeline diff, as a
+            # capped diff vs turn before (utils/state_dump). Leak-free — it is
+            # the agent's product, never the ground truth.
+            #
+            # The seeded attempt-1 failure still gets re-graded, purely for the
+            # integrity check that the log-rebuilt call list reproduces the seed
+            # row's verdict (zero LLM cost).
             state_diff = None
             if getattr(arch, "uses_state", False):
-                if seeded:  # replay the calls from the seeded log [first time]
-                    seed_calls = log_to_calls(seed_log_path(task["id"]))
+                if seeded:  # rebuild the baseline trajectory from its log
+                    model_calls = log_to_calls(seed_log_path(task["id"]))
                     reset_bfcl_instances()
-                    replayed, _, _ = grade(seed_calls, answer, task, category)
+                    replayed, _, _ = grade(model_calls, answer, task, category)
                     assert replayed == passed, (
                         f"seed replay verdict {replayed} != seed row {passed} for "
                         f"{task['id']} — logs/{SEED_LABEL} and results/{SEED_LABEL} "
                         f"are out of sync"
                     )
-                state_diff = state_diff_string(task)
+                else:
+                    model_calls = calls
+                # Which state representation (net diff / per-turn timeline) is
+                # the arm's own business — see `build_state_signal`.
+                state_diff = arch.build_state_signal(task, model_calls)
 
             reflection = arch.reflect(
                 attempt_text, signal, attempt, tlog, overhead, state_diff
