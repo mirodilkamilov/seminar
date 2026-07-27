@@ -250,9 +250,11 @@ def run_one_multi(arch, task, answer, category, label, seed_row):
                     )
                 attempt_text = messages_to_text(messages)
 
-            # richer_reflexion_turnwise only: the model's own per-turn timeline diff, as a
-            # capped diff vs turn before (utils/state_dump). Leak-free — it is
-            # the agent's product, never the ground truth.
+            # richer_reflexion_turnwise only: the model's own per-turn state
+            # timeline — what each turn changed relative to the turn before,
+            # capped (utils/state_dump). Leak-free: replayed in a private
+            # namespace, never the grader's instances, and its turn boundaries
+            # come from the task, not from where the grader stopped.
             #
             # The seeded attempt-1 failure still gets re-graded, purely for the
             # integrity check that the log-rebuilt call list reproduces the seed

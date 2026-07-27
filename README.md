@@ -1,13 +1,24 @@
 # Reasoning–Action Loop Architectures on BFCL v3
 
-Comparative evaluation of five LLM agent architectures on the **BFCL v3
-multi-turn** tool-calling benchmark.
+Comparative evaluation of LLM agent architectures on the **BFCL v3 multi-turn**
+tool-calling benchmark.
 
 > **Course:** Agentic AI seminar, University of Passau (WS 2025/2026).
 > **Presentation:** 22 May 2026. **Report:** due July 2026.
+> **Status:** all runs complete (27 Jul 2026); writing is what remains.
 
-**Research question:** *Where in the reason–act loop does adding reflection
-actually help on multi-turn tool calling?*
+**Research question** *(restated 27 Jul 2026 — see `docs/REVIEW.md` §3.6)*:
+*Does the information content of the reflection signal change **how many**
+failures reflection recovers, or only **which ones**?*
+
+Secondary axis: *where* in the reason–act loop reflection sits. Two of three
+positions are tested (before-act, after-episode); per-step reflection is not —
+stated as a scoped limitation, not implied coverage.
+
+**Answer: only which ones.** Across six rungs of increasing signal content the
+pass count never leaves a 3-task band, because every arm draws from the same
+28-of-115 pool of reachable failures; the signal relocates the model's act/ask
+threshold, trading one category's conversions for another's.
 
 Failure analysis (per architecture, tied to five failure modes) is supporting
 evidence for interpreting the quantitative results — not a separate goal.
@@ -16,18 +27,29 @@ evidence for interpreting the quantitative results — not a separate goal.
 
 ## Architectures
 
-| # | Architecture                                   | What it adds to the loop                                                                                                             |
-|---|------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------|
-| 1 | **Function-calling baseline**                  | nothing — native FC, no reasoning prompt                                                                                             |
-| 2 | **ReAct**                                      | an explicit `Thought:` before each action (action still via native FC)                                                               |
-| 3 | **Reflexion (episodic)**                       | on failure, reflect, retry with the reflection in context (scoped to the current task)                                               |
-| 4 | **Reflexion (vector DB)** — *own contribution* | reflections embedded (Octen-Embedding-8B) and stored persistently; new tasks retrieve top-k similar past reflections and inject them |
-| 5 | **REBACT**                                     | reflect-before-act: after each tool result, a reflect step decides whether to revise the last action                                 |
+*Scope revised 23 Jul 2026 after the Phase-3 audit (`docs/REVIEW.md` §3.2.4);
+final 27 Jul.*
 
-These form a deliberate progression: no reasoning → reasoning → within-task
-reflection → cross-task reflection → per-step reflection. The comparison is only
-meaningful if everything *except* the reasoning scaffold is held constant — see
-**Methodology → fairness invariants**.
+| # | Architecture                                                                     | What it adds to the loop                                                                             |
+|---|----------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|
+| 1 | **Function-calling baseline** (`baseline`)                                       | nothing — native FC, no reasoning prompt. Run twice (`baseline__run2`) as the measurement-noise band |
+| 2 | **ReAct** (`react`)                                                              | an explicit `Thought:` before each action (action still via native FC)                               |
+| 3 | **Reflexion (episodic)** (`reflexion`)                                           | on failure, reflect, retry with the reflection in context (scoped to the current task)               |
+| 4 | **Reflexion (richer signal)** (`richer_reflexion_turnwise`) — *own contribution* | as (3), plus the model's **own per-turn state timeline** in the reflection call                      |
+| — | ~~Reflexion (vector DB)~~                                                        | **dropped** — replaced by (4) as the contribution (§3.2.4 Decision 4)                                |
+| — | ~~REBACT~~                                                                       | **dropped** for time; reported as a scoped limitation (§3.2.4 Decision 5)                            |
+
+Plus two **sham-reflection control arms** (`blind_retry`, `blind_retry_lite`)
+that are not architectures — they exist to decompose what a retry result is made
+of. See *Methodology → control ladder*.
+
+The comparison is only meaningful if everything *except* the reasoning scaffold
+is held constant — see **Methodology → fairness invariants**.
+
+Both dropped arms: REBACT is the costlier loss on the secondary axis
+(it is the mid-loop position), whereas the vector DB concerned memory
+*persistence*, which is orthogonal to the signal-content question
+the project ended up answering.
 
 ---
 
@@ -74,9 +96,12 @@ meaningful if everything *except* the reasoning scaffold is held constant — se
   At n=50 this is what gives the comparison statistical power; unpaired
   proportion tests would be too coarse.
 - **Cost is a first-class axis:** from the logs we report total tokens, peak
-  context, LLM-call count, and latency per task, and plot **pass-rate-vs-cost**.
-  Reflection isn't free (REBACT ~doubles calls, Reflexion adds retries, vector-DB
-  adds retrieved context). We **measure** context growth but **don't** add context
+  context and LLM-call count per task, and plot **pass-rate-vs-cost**.
+  (Latency is logged but *not* comparable across runs — see Limitations.)
+  Reflection isn't free: the retry arms cost ≈2.1× baseline input tokens.
+  The result cuts against intuition — the **retries** are the entire bill and
+  the part that worked, while the reflection calls are ~2% of the arm total and
+  the part that didn't. We **measure** context growth but **don't** add context
   management (summarization/truncation) — that would be another confound.
 
 ### Fairness invariants (the comparison is invalid if any is violated)
@@ -121,73 +146,120 @@ meaningful if everything *except* the reasoning scaffold is held constant — se
   - **Attempt 1 is seeded from baseline run 1** (verdict, cost and — on
     failure — the trajectory are reused from `results/` + `logs/`), so
     **Reflexion@1 ≡ baseline by identity** and the compute goes to the retries.
-  - **Blind-retry control (the placebo arm).** Retrying is a lottery even with
-    an empty reflection: temperature-0 is not deterministic on this endpoint
-    (7.8% of baseline failures flipped to pass on an identical re-run), so the
-    raw @1→@k gap conflates reflection value with retry luck. `blind_retry`
-    runs the identical loop, preamble template and sanitized signal, but fills
-    the reflection slot with a fixed, generic, reflection-*shaped* **sham**
-    text. The two subtractions then separate the ingredients:
-    **Reflexion@k − BlindRetry@k** = value of the reflection *content*;
-    **BlindRetry@k − @1** = retry luck + failure-signal + framing effects.
-    (Free sanity check: the blind arm's first retry should flip ≈7.8% of
-    failures.)
   - The failure signal between attempts comes from the grader and is an
     **oracle the baseline never sees** — we state this asymmetry, and we
     **sanitize** it (`utils/sanitize.py`): the grader's raw output leaks the
-    ground truth, so both arms see only *which* environment class mismatched
+    ground truth, so every arm sees only *which* environment class mismatched
     or *which* turn went wrong (class + turn; never values, never which call
-    was expected) — identical signal in both arms.
-- **Reflexion (vector DB)** stays a **single attempt per task** plus retrieved
-  cross-task reflections, compared against episodic Reflexion@1 to isolate the
-  value of *persistent* memory. Task order is fixed and we plot the learning
-  curve (pass rate vs. position as memory fills).
-- **REBACT** uses **state rewind** to revise mutating actions (rebuild the
-  simulator from its initial config, replay only the kept calls). **This is not
-  faithful to a real deployment** — an agent cannot un-send a committed mutation —
-  and we say so. We accept it because the RQ is about the *value of
-  self-reflection*, not deployability; a read-only-only variant would neuter
-  reflection on exactly the mutating tasks where it matters. (If rewind proves
-  valuable, a natural follow-up distills the rewound trajectories into a model
-  that runs without it.)
+    was expected) — identical signal in all retry arms.
+- **Reflexion (richer signal)** (`richer_reflexion_turnwise`) is identical to
+  the episodic arm except that the reflection call also receives the model's
+  **own per-turn state timeline** — what each turn changed relative to the turn
+  before (`utils/state_dump.py`). It is *not* oracle-derived: the trajectory is
+  replayed in a private namespace that cannot alias the grader's `_eval` or
+  `_ground_truth_eval` instances (asserted at import), and the turn boundaries
+  come from `task["question"]`, i.e. the task's own structure. So
+  `richer_reflexion_turnwise − reflexion` needs **no new control**: both arms
+  retry, both reflect, the retry lottery is present in both and cancels.
+
+### The control ladder
+
+Retrying is a lottery even with an empty reflection: temperature-0 is not
+deterministic on this endpoint (7.8% of baseline failures flipped to pass on an
+identical re-run), so the raw @1→@k gap conflates reflection value with retry
+luck. `blind_retry` runs the identical loop, preamble template and sanitized
+signal, but fills the reflection slot with a fixed, reflection-*shaped* **sham**;
+`blind_retry_lite` strips the sham's two imperative advice clauses. The
+subtractions separate the ingredients:
+
+> **Reflexion@k − BlindRetry@k** = value of the reflection *content*
+> **BlindRetry@k − @1** = retry luck + failure-signal + framing
+
+**Every rung is reported** — they are not alternatives to choose between:
+
+| rung            | arm                         | adds                                         | pass@3  |
+|-----------------|-----------------------------|----------------------------------------------|---------|
+| `@1`            | —                           | no retry                                     | 85/200  |
+| plain re-run    | `baseline__run2`            | retry luck (7.8%/retry)                      | —       |
+| minimal advice  | `blind_retry_lite`          | + sanitized signal + reflection-shaped slot  | 102/200 |
+| specific advice | `blind_retry`               | + generic corrective imperatives             | 103/200 |
+| task-specific   | `reflexion`                 | + a lesson distilled from the actual failure | 100/200 |
+| + own state     | `richer_reflexion_turnwise` | + the model's own per-turn state timeline    | 100/200 |
+
+Call these **sham-reflection controls**, not placebos: the sham arms genuinely
+beat a plain re-run (12.2% vs 7.8% flip rate), so the slot is not inert even
+though its *advice content* is — `blind_retry` − `blind_retry_lite` is +0.5pp
+(2 v 1), with three of four categories identical task-for-task. `blind_retry`
+is the primary control; the headline is unchanged whichever is used.
+
+`blind_retry_lite` doubles as a **contemporaneous minimal-perturbation noise
+band**: two conditions differing by 69 prompt characters disagree on 3/200
+tasks. Use it, not the 30 Jun baseline re-run, as the ruler for the retry arms.
+
+**Every `@k` figure carries a caveat:** retries fire only on a graded FAIL, so
+`@k ≥ @1` holds by construction and no `@k` number is deployment-realistic — a
+real agent does not know it failed.
 
 ### What each architecture adds beyond cognition
 
-Beyond the reasoning scaffold, two architectures quietly gain something else.
-These are **named confounds**, not features of "reflection":
+Beyond the reasoning scaffold, the retry arms quietly gain something else. This
+is a **named confound**, not a feature of "reflection":
 
-- **Reflexion gets an oracle** — the grader tells it the task failed before it
-  retries; the others get one shot, no answer key. (Sanitized as above, but the
-  fail/retry bit is itself information they lack.)
-- **REBACT gets an undo** — the state rewind (above). It does **not** get the
-  oracle, so it has the **same information as ReAct**; the only difference is the
-  undo.
+- **Every retry arm gets an oracle** — the grader tells it the task failed
+  before it retries; `baseline` and `react` get one shot, no answer key.
+  (Sanitized as above, but the fail/retry bit is itself information they lack.)
+  All four retry arms share it identically, so it cancels in every
+  within-family contrast and lands, correctly labelled, in `BlindRetry@k − @1`.
 
-So the five pass rates are **not a single ladder** where more reflection = higher
-score — that would credit reflection with gains from the oracle or the undo. We
-lead Results with the clean within-family contrasts and treat the absolute
-five-way ranking as *illustrative*:
+So the pass rates are **not a single ladder** where more reflection = higher
+score — that would credit reflection with gains from the oracle. We lead Results
+with the clean within-family contrasts and treat the absolute ranking as
+*illustrative*:
 
-| Compare…                                  | …isolates                                                                       | Clean?                                                                                         |
-|-------------------------------------------|---------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------|
-| Baseline → ReAct                          | pure added thinking, nothing else changes                                       | ✅ fully clean                                                                                  |
-| BlindRetry@k → Reflexion@k                | value of the reflection *content* (net of retry luck, failure signal, framing) | ✅ clean — the placebo arm differs only in whether the lesson is task-specific                 |
-| Reflexion@1 → BlindRetry@k                | the placebo term: retry luck + failure-signal + framing                         | ✅ clean (its luck floor is the measured 7.8% noise flip rate)                                 |
-| Reflexion-episodic@1 → Reflexion-vectorDB | value of *persistent* cross-task memory                                         | ✅ clean                                                                                        |
-| ReAct → REBACT                            | *where* in the loop reflection sits (reason-before-act vs reflect-after-result) | ◐ same info, no oracle; only confound is the undo — we **measure the rewind rate** as its size |
-| ReAct vs REBACT vs Reflexion (absolute)   | "which idea wins overall"                                                       | ⚠️ confounded by oracle / undo                                                                 |
+| Compare…                                | …isolates                                                     | Clean?                                                                                   |
+|-----------------------------------------|---------------------------------------------------------------|------------------------------------------------------------------------------------------|
+| Baseline → ReAct                        | *instructed* vs *spontaneous* explicit reasoning              | ✅ clean as an experiment — but the manipulation is near-saturated for this model (below) |
+| BlindRetryLite@k → BlindRetry@k         | value of generic corrective advice                            | ✅ clean — a 69-character prompt difference, constant in both                             |
+| BlindRetry@k → Reflexion@k              | value of the reflection *content*                             | ✅ clean — the sham arm differs only in whether the lesson is task-specific               |
+| Reflexion@k → RicherReflexionTurnwise@k | value of a *richer, non-oracle* signal in the reflection call | ✅ clean — both retry, both reflect, retry lottery cancels                                |
+| Reflexion@1 → BlindRetry@k              | retry luck + failure-signal + framing                         | ✅ clean (its luck floor is the measured 7.8% noise flip rate)                            |
+| absolute ranking across all arms        | "which idea wins overall"                                     | ⚠️ confounded by the oracle                                                              |
 
-The `ReAct → REBACT` pair is the most direct answer to the research question
-("*where* in the loop does reflection help"), and its only confound is the undo —
-whose magnitude we quantify from the REBACT logs (how often a rewind actually
-fires). On read-only-heavy turns nothing gets un-done, so the confound is bounded
-by the measured rewind rate rather than assumed.
+**The `Baseline → ReAct` row needs its caveat stated, not buried.** The baseline
+is *not* a no-thinking control: with zero reasoning scaffold the model already
+emits free-text deliberation before **80.2%** of its tool calls. The ReAct prompt
+moves that to 83.0% (+3.1pp, CI [−0.3, +6.4]) and adds ~20 chars per action, and
+the literal `Thought:` label is picked up on only 21.6% of action-steps. A null
+pass-rate difference is therefore the *expected* outcome of a near-saturated
+manipulation — and the manipulation check is what lets us say so rather than
+guess. Report it as a dose-response measurement (tiny dose, null response), and
+name the condition precisely: **zero-shot ReAct-style thought injection over
+native function calling**, not "ReAct" (the original used few-shot exemplars and
+text-parsed actions, both ruled out by our fairness invariants).
 
 ### Limitations
 
 - **Single model** (`qwen3-next-80b-a3b-instruct`): conclusions are
-  model-specific — "where reflection helps *this* model". A second model on a
-  small subset is a stretch goal to check the ordering is robust.
+  model-specific. A second model on a small subset was a stretch goal, not run.
+- **Two of three loop positions tested.** Per-step reflection (REBACT) was cut
+  for time. Since our central finding is that episodic reflection shifts the
+  act/ask threshold *globally* — which is why opposite-signed category effects
+  cancel — per-step reflection is the most promising untested position: it
+  operates at a finer grain and could apply the correction locally, escaping
+  exactly the cancellation we observe.
+- **The richer signal manipulated salience, not information.** 47.6% of the
+  state block is already verbatim in the transcript the reflector reads and the
+  rest is derivable from it. A signal genuinely *new* to the agent (an
+  environment probe, a validator, an execution trace it could not observe)
+  remains untested. This is a lexical measurement and is stated as one.
+- **No `@k` number is deployment-realistic** — retries fire on a graded FAIL,
+  which a real agent does not have.
+- **Arms ran sequentially, not interleaved**, over 30 Jun – 27 Jul. The two
+  shams, run on different days, flipped exactly 14/115 each, which bounds
+  day-to-day variation; future runs should interleave at task level.
+- **Latency is not comparable across runs.** The shared university endpoint's
+  load dominates it (ReAct is "faster" than baseline while emitting more
+  tokens). Tokens and LLM-call counts are the cost axis.
 - BFCL grades a single trajectory per turn against a *minimal sufficient* ground
   truth; a model that "did the right thing" but skipped a state-neutral
   ground-truth call can still fail the response gate (see `CLAUDE.md`).
@@ -199,20 +271,24 @@ by the measured rewind rate rather than assumed.
 - **Model:** `qwen3-next-80b-a3b-instruct` via the FIM API
   (`https://llms.innkube.fim.uni-passau.de/v1`). Key in `.env` as `FIM_API_KEY`
   (gitignored).
-- **Embedder:** `octen-embedding-8b` (FIM). **Reranker:** `qwen3-reranker-4b`
-  (FIM, optional).
-- **Vector DB:** Chroma or FAISS (local, persistent) — decided at Phase 4.
+- ~~**Embedder** / **Reranker** / **Vector DB**~~ — all three were needed only
+  by the dropped vector-DB variant. **No embedding or retrieval stack is used
+  anywhere in the final setup.**
 - All LLM calls go through `utils.retry.call_with_retry` (the FIM endpoint has
   occasional 5xx blips).
 
 ## Repository layout
 
 ```
-architectures/   one file per architecture, all subclass a shared base
-utils/            shared helpers: retry, schema, executor, logging, config
+architectures/    one file per architecture, all subclass a shared base
+utils/            shared helpers: retry, schema, executor, sanitize,
+                  state_dump, conversation, logging, config
 run_benchmark.py  runs an architecture over the subset and grades it
+results/          per-task grading + cost; {arch}/{category}.jsonl, plus
+                  results.csv / summary.csv
 gorilla/          cloned BFCL repo at tag v1.3 (do not edit; third-party)
 logs/             per-task trajectory JSONL
+docs/REVIEW.md    dated critical review + locked design decisions
 CLAUDE.md         implementation details + conventions
 NEXT_STEPS.md     ordered task list ("what to work on next")
 ```
@@ -227,6 +303,14 @@ python run_benchmark.py --make-subset                # freeze task_subset.json a
 python run_benchmark.py --arch react --category base # one architecture, one category
 python run_benchmark.py --arch baseline --sample 5   # quick smoke (random, no frozen subset)
 python run_benchmark.py --arch baseline --tag run2   # noise re-run → separate output dir
+
+# Retry arms. Attempt 1 is always seeded from results/logs of the `baseline`
+# run, so these need a completed baseline on this machine and cost only the
+# retries.
+python run_benchmark.py --arch reflexion
+python run_benchmark.py --arch blind_retry
+python run_benchmark.py --arch blind_retry_lite
+python run_benchmark.py --arch richer_reflexion_turnwise
 
 # Re-run specific task id(s) — category is inferred from the id, and the fresh
 # row(s) are MERGED into the existing category file (matching rows replaced,

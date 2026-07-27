@@ -6,18 +6,38 @@ Comparative evaluation of LLM agent architectures on the BFCL v3 multi-turn
 tool-calling benchmark. Course: Agentic AI seminar, University of Passau
 (WS 2025/2026). Presentation delivered 22 May 2026; report due July 2026.
 
-Research question: **Where in the reason-act loop does adding reflection
-actually help on multi-turn tool calling?**
+Research question (restated 27 Jul 2026 around the dependent variable the data
+actually answer — REVIEW.md §3.6): **Does the information content of the
+reflection signal change how many failures reflection recovers, or only which
+ones?** "Where in the reason-act loop does reflection help" is the secondary
+axis, with an explicit coverage statement: two of three loop positions tested,
+REBACT missing.
 
-**Final scope (revised 23 Jul 2026):** four architectures — `baseline`,
-`react`, `reflexion`, `richer_reflexion` (the contribution) — plus two control
-arms (`blind_retry`, `blind_retry_lite`) and a baseline noise re-run. The
-vector-DB Reflexion and REBACT are dropped and reported as limitations; see
-REVIEW.md §3.2.4. Headline result so far: **the entire +7.5pp Reflexion gain is
-retry luck; reflection content is worth −1.5pp (CI [−5.5, +2.0])** — but it is
-not a flat null, because reflection reliably shifts the model's *act/ask
-threshold*, helping where failures are under-acting (miss_func +8pp) and
-hurting where they over-hesitate (miss_param −10pp).
+**Final scope (all runs complete, 27 Jul 2026):** four architectures —
+`baseline`, `react`, `reflexion`, `richer_reflexion_turnwise` (the
+contribution) — plus two control arms (`blind_retry`, `blind_retry_lite`) and a
+baseline noise re-run. The vector-DB Reflexion and REBACT are dropped and
+reported as limitations; see REVIEW.md §3.2.4.
+
+**Headline result: the signal decides *which* failures reflection converts, not
+*how many*.**
+
+- The entire +7.5pp Reflexion gain is retry luck; reflection content is worth
+  **−1.5pp** (CI [−5.5, +2.5], 6 v 9, p = 0.607).
+- The richer state signal adds **+0.0pp** over minimal-signal reflection
+  (7 v 7, p = 1.00) — the information-starvation hypothesis is **not**
+  supported.
+- Neither is a flat null: reflection reliably shifts the model's *act/ask
+  threshold*. Minimal signal helps where failures are under-acting
+  (miss_func +8pp) and hurts where they over-hesitate (miss_param −10pp); the
+  state signal reverses both (miss_func −8pp, miss_param +8pp), moving the arm
+  back toward the sham controls in both directions at once.
+- **The count is capped by a signal-invariant borderline pool**: only 28 of the
+  115 attempt-1 failures are ever converted by *any* of 5 re-roll conditions,
+  and every arm converts 15–18 of those same 28.
+- Why the state signal changed nothing in aggregate, measured: **47.6% of it is
+  already verbatim in the transcript the reflector reads**, and the rest is
+  derivable from it. The manipulation was salience, not information.
 
 Failure analysis (per architecture, tied to the five failure modes) is
 used as supporting evidence to interpret the quantitative results, not
@@ -34,13 +54,20 @@ as a separate research goal.
 3. **Reflexion (episodic)** (`reflexion`) — original: on failure, reflect
    verbally, retry with the reflection in context. Reflection is scoped to the
    current task only.
-4. **Reflexion (richer signal)** (`richer_reflexion`) — **own contribution**.
-   Identical to (3) except the reflection call additionally sees **the model's
-   own final environment state** (public attrs of its own simulator instances),
-   not just the class+turn signal. Leak-free by construction: it is the agent's
-   own product, never the ground-truth instances. Motivated by the Phase-3
-   finding that episodic reflections are *information-starved* — they guess at
-   diagnoses — rather than useless.
+4. **Reflexion (richer signal)** (`richer_reflexion_turnwise`) — **own
+   contribution**. Identical to (3) except the reflection call additionally sees
+   **the model's own per-turn state timeline** (what each turn changed relative
+   to the turn before, public attrs of its own simulator instances), not just
+   the class+turn signal. Leak-free by construction: it is the agent's own
+   product, replayed in a private namespace, never the ground-truth instances,
+   and its turn boundaries come from `task["question"]` rather than from the
+   grader. Motivated by the Phase-3 finding that episodic reflections are
+   *information-starved* — they guess at diagnoses — rather than useless.
+   **That hypothesis was not supported** (+0.0pp; REVIEW.md §3.2.6.2).
+   *An earlier build (`richer_reflexion`, a net diff read from the grader's
+   `_eval` instances) was defective — the grader stops at the first failing
+   turn, so the dump was truncated at an oracle-derived cut point — and is
+   discarded; see §3.2.6.1. Do not cite its numbers.*
 5. ~~**Reflexion (vector DB)**~~ — **dropped** (REVIEW.md §3.2.4 Decision 4).
    Replaced by (4) as the contribution.
 6. ~~**REBACT**~~ — **dropped** for time (§3.2.4 Decision 5); reported as a
@@ -55,13 +82,18 @@ re-roll), so the `@1 → @k` gap conflates reflection value with retry luck. The
 controls decompose it into a **ladder**, and **every rung is reported** — they
 are not alternatives to choose between (§3.2.4 Decision 1):
 
-| rung            | arm                | adds                                         | pass@3  |
-|-----------------|--------------------|----------------------------------------------|---------|
-| `@1`            | —                  | no retry                                     | 85/200  |
-| plain re-run    | `baseline__run2`   | retry luck (7.8%/retry, measured 30 Jun)     | —       |
-| minimal advice  | `blind_retry_lite` | + sanitized signal + reflection-shaped slot  | 102/200 |
-| specific advice | `blind_retry`      | + generic corrective imperatives             | 103/200 |
-| task-specific   | `reflexion`        | + a lesson distilled from the actual failure | 100/200 |
+| rung            | arm                         | adds                                         | pass@3  |
+|-----------------|-----------------------------|----------------------------------------------|---------|
+| `@1`            | —                           | no retry                                     | 85/200  |
+| plain re-run    | `baseline__run2`            | retry luck (7.8%/retry, measured 30 Jun)     | —       |
+| minimal advice  | `blind_retry_lite`          | + sanitized signal + reflection-shaped slot  | 102/200 |
+| specific advice | `blind_retry`               | + generic corrective imperatives             | 103/200 |
+| task-specific   | `reflexion`                 | + a lesson distilled from the actual failure | 100/200 |
+| + own state     | `richer_reflexion_turnwise` | + the model's own per-turn state timeline    | 100/200 |
+
+Read down the `pass@3` column: **six rungs of increasing signal content, and
+the count never leaves a 3-task band.** That is the dose-response result — the
+ladder is the contribution, not any single arm.
 
 `blind_retry` is the **primary** control; `blind_retry_lite` ablates its advice
 clauses. **The ablation came back inert** (+0.5pp, CI [−1.0, +2.5]; three of
@@ -356,30 +388,51 @@ design per REVIEW.md §3.2. Key mechanics:
 - ~~**Vector-DB variant (the contribution)**~~ — dropped 23 Jul 2026
   (REVIEW.md §3.2.4 Decision 4). Replaced by the richer-signal arm below.
 
-### Richer-signal Reflexion (`richer_reflexion`) — the contribution
+### Richer-signal Reflexion (`richer_reflexion_turnwise`) — the contribution
 
 Same architecture as episodic Reflexion in every respect (k=3, fresh-episode,
-seeded attempt 1, same preamble, same `REFLECTION_PROMPT`) **except** that the
-reflection call also receives the model's **own final environment state**.
+seeded attempt 1, same preamble) **except** that the reflection call also
+receives the model's **own per-turn state timeline** — what each turn changed
+relative to the turn before (`utils/state_dump.py::state_timeline_string`,
+prompt `REFLECTION_PROMPT_TIMELINE`).
 
 Why: Phase 3 found the reflections are *information-starved*, not useless —
 with a class+turn signal the model guesses at diagnoses, and a guessed
 diagnosis is behaviourally sham-like. The state dump is **not oracle-derived**,
-so it sidesteps the leak constraint entirely: it is the agent's own product.
+so it sidesteps the leak constraint entirely: it is the agent's own product,
+replayed in a private namespace, with turn boundaries taken from
+`task["question"]`.
 
-`richer_reflexion − reflexion` is a clean contrast needing **no new control** —
-both arms retry, both reflect, they differ only in signal richness, so the
-retry lottery is present in both and cancels.
+`richer_reflexion_turnwise − reflexion` is a clean contrast needing **no new
+control** — both arms retry, both reflect, they differ only in signal richness,
+so the retry lottery is present in both and cancels.
 
-Two hazards, both confirmed against BFCL source:
+**Outcome: the hypothesis was not supported.** +0.0pp pooled (7 v 7, p = 1.00);
+per-category it *reverses* minimal-signal reflection in both directions
+(miss_func −8pp, miss_param +8pp) rather than improving on it. The measured
+reason: **47.6% of the state block is already verbatim in the transcript** the
+reflector reads and the rest is derivable from it — the manipulation is
+salience, not information. Full results and mechanism: REVIEW.md §3.2.6.2.
+
+**A defective first build is on the record and must not be cited.** The
+original `richer_reflexion` read state from the grader's `_eval` instances after
+`grade()`. `multi_turn_checker` returns at the *first failing turn*, so the dump
+was (a) a prefix of the episode, not the final state the prompt claimed, and
+(b) — the disqualifying one — truncated at an **oracle-derived cut point**,
+handing the reflector turn-localization that `sanitize.py` withholds for
+state-gate failures and that no control arm got. It scored 105/200; it is
+discarded. Recoverable at git `10ff102`. See REVIEW.md §3.2.6.1.
+
+Three hazards, all confirmed against BFCL source:
 
 1. **The leak is one string-match away.** After `grade()`, `mtu.__dict__` holds
    *both* state sets: model replay as
    `{model}_eval_{task_id}_{class}_instance` (`multi_turn_checker.py:41`) and
    **ground truth** as `{model}_ground_truth_eval_{task_id}_{class}_instance`
-   (`:58`). Filter on `"_ground_truth" not in key` and **assert it** — getting
-   this wrong pipes the answer key into the prompt and would look like a
-   spectacular result. Mirror `state_checker`'s filter (public attrs via
+   (`:58`). The shipped arm sidesteps the filter entirely by replaying into its
+   **own private namespace** (`richer_replay`), asserted at import time to
+   contain neither `eval` nor `ground_truth` — structural separation beats a
+   string filter. Mirror `state_checker`'s attribute filter (public attrs via
    `vars()`), and cap serialized length or `long_context` will blow up the
    prompt.
 2. **Seeded attempt 1 has no `_eval` instances** — `run_one_multi` reads the
@@ -390,7 +443,7 @@ Two hazards, both confirmed against BFCL source:
    seeded attempt too. Zero LLM cost, and it yields a free integrity check:
    assert the replayed verdict equals the seed row's `passed`.
 
-3. **Dump the DIFF against `initial_config`, never the absolute state.**
+3. **Dump a DIFF, never the absolute state.**
    Measured over the frozen subset: **71% of public attributes are untouched by
    the ground-truth trajectory** even when restricted to classes the task
    actually exercised (77.5% over all involved classes; per class, touched-only:
@@ -413,12 +466,22 @@ Two hazards, both confirmed against BFCL source:
    is *expected* there and diagnoses nothing, so don't word the prompt as though
    state is always the culprit.
 
-   **Implemented in `utils/state_dump.py` (cap = 2,000 chars).** The above is on
-   GT trajectories; the arm diffs the *model's* state, which for a failing model
-   is usually smaller. Measured over the 115 attempt-1 failures: 77 real diffs
-   (median 291, max 1,390 chars), 33 empty (mostly under-acting miss_func/
-   miss_param — "you changed nothing" is the right signal there), 5 oversized →
-   sentinel, all `long_context`. Leak guard is an `assert`, not a comment.
+   The measurements above are on GT trajectories and on the **net-diff** build;
+   they motivated diffing rather than dumping absolute state, and that reasoning
+   stands. What shipped is the **per-turn timeline** at
+   `STATE_TIMELINE_CHAR_CAP = 3,500` (a timeline repeats a changed attribute
+   once per turn that touched it, so it runs larger than a net diff). Turns that
+   changed nothing are listed as `no state changes` rather than omitted —
+   "turn 3 persisted nothing" is exactly the under-acting signal, and dropping
+   those lines would make an inactive turn indistinguishable from a missing one.
+
+   **As delivered** (218 reflection calls in the run): **175 real** timelines
+   (median 510 chars, max 3,156), **28 empty**, **15 oversized → sentinel** (all
+   `long_context`). Leak guard is an `assert`, not a comment.
+
+   One caveat to keep in the prompt wording: 15 tasks' ground truth mutates
+   nothing at all, so an empty timeline is *expected* there and diagnoses
+   nothing — don't word the prompt as though state is always the culprit.
 
 ## Open questions / TBD
 
@@ -448,7 +511,12 @@ Qualitative analysis:
   against ground truth. Originally planned for the vector arm; it survives that
   cut and now applies to the episodic arm, where it is the evidence for the
   null's scope statement (*reflection over a **minimal** signal adds nothing* —
-  not "reflection is worthless") and the motivation for the richer-signal arm.
+  not "reflection is worthless").
+- **Hand-code the 14 discordant `reflexion` vs `richer_reflexion_turnwise`
+  lesson pairs** — same task, same transcript, ±the state block. Highest-value
+  remaining item: it is the direct evidence for whether the state signal changed
+  the *diagnosis* or only the act/ask lean (REVIEW.md §3.2.6.2), and it is an
+  afternoon's work. Do it in the same pass as the ~30-lesson audit above.
 
 ## File structure
 
@@ -462,7 +530,8 @@ Qualitative analysis:
 │   ├── architecture.py         # base class + shared FC loop (run_task)
 │   ├── baseline.py             # FC baseline (name + system_prompt)
 │   ├── react.py                # ReAct (name + system_prompt)
-│   └── reflexion.py            # ReflexionEpisodic + BlindRetry + BlindRetryLite
+│   └── reflexion.py            # ReflexionEpisodic + TurnwiseRicherReflexion
+│                               #   + BlindRetry + BlindRetryLite
 ├── utils/                      # shared helpers — import these, don't reimplement
 │   ├── __init__.py
 │   ├── config.py               # MODEL, client, CATEGORIES, task_paths(), sys.path setup
@@ -471,7 +540,8 @@ Qualitative analysis:
 │   ├── executor.py             # execute_call_locally(), reset_bfcl_instances()
 │   ├── sampling.py             # stratified subset → task_subset.json
 │   ├── sanitize.py             # sanitize_failure_signal() — the oracle-leak guard
-│   ├── conversation.py         # log_to_messages(), messages_to_text() — reflection input
+│   ├── state_dump.py           # state_timeline_string() — the richer-signal block
+│   ├── conversation.py         # log_to_messages/_calls(), messages_to_text()
 │   └── logging.py              # TrajectoryLogger + pretty_print_log()
 ├── analysis/                   # one-off probes; each prints its own numbers
 ├── docs/

@@ -16,14 +16,23 @@ are reported** — never one picked after seeing which flatters the result:
 
     @1 → plain re-run → blind_retry_lite → blind_retry → reflexion
           retry luck     minimal advice     generic advice   task-specific
+       → richer_reflexion_turnwise
+          + the model's own per-turn state timeline
 
     Reflexion@k − BlindRetry@k = value of the reflection content
     BlindRetry@k − @1          = retry luck + signal + framing
 
-The blind arms are *active* controls, not placebos: their sham is form-matched
-to a real reflection and therefore carries real generic advice.
-``blind_retry_lite`` strips that advice, so the pair bounds how much of the
-control's performance came from the advice rather than from the retry.
+Call these **sham-reflection controls**, not placebos: the sham arms do beat a
+plain re-run (12.2% vs 7.8% flip rate), so the reflection-shaped slot is not
+inert. Its *advice content*, though, is: ``blind_retry_lite`` strips the sham's
+two imperative clauses and scores within 1 task of ``blind_retry`` (+0.5pp,
+2 v 1, three of four categories identical task-for-task). So the 4.4pp the sham
+arms gain over a plain re-run belongs to the slot + sanitized signal + retry
+framing, with advice content excluded by measurement.
+
+Outcome across the whole ladder: the pass *count* never leaves a 3-task band
+above the retry-only rung, because every arm draws from the same 28-of-115 pool
+of reachable failures. What the signal changes is *which* members it converts.
 
 Fairness invariants: attempt 1 is identical to the baseline (no preamble — and
 when seeded it literally *is* the baseline run), so every arm retries the same
@@ -85,13 +94,16 @@ REFLECTION_PROMPT = (
     "the reflection itself. Make the Lesson self-contained."
 )
 
-
-# Turnwise variant (`richer_reflexion_turnwise`). BYTE-IDENTICAL to
-# REFLECTION_PROMPT_RICH except the clause naming the block's structure
-# ("turn by turn" vs "relative to its starting state"), so
-# turnwise − richer is a single manipulation: same signal, same availability
-# (both degrade to the *same* sentinel on the same tasks — measured, 0/115
-# disagreements), differing only in whether changes are attributed to turns.
+# Reflection prompt for `richer_reflexion_turnwise`. BYTE-IDENTICAL to
+# REFLECTION_PROMPT except for the one inserted paragraph carrying the state
+# timeline, so `richer_reflexion_turnwise − reflexion` is a single manipulation:
+# same transcript, same sanitized signal, same output format, differing only in
+# whether the reflector is also shown what its own actions changed.
+#
+# A superseded variant (`richer_reflexion`, net diff against initial_config,
+# read from the grader's `_eval` instances) was removed 27 Jul 2026: the grader
+# returns at the first failing turn, so that dump was both a prefix of the
+# episode and cut at an ORACLE-DERIVED point.
 REFLECTION_PROMPT_TIMELINE = (
     "Below is the full transcript of your previous attempt at a multi-turn "
     "tool-calling task. The attempt was graded as FAILED.\n\n"
@@ -135,8 +147,9 @@ class ReflexionEpisodic(Architecture):
     # True → reflect() makes an LLM call over the failed trajectory.
     # The blind controls override this to use their fixed sham text.
     writes_reflections = True
-    # True → the runner computes the model's own final-state diff and passes it
-    # to reflect(). Only richer_reflexion consumes it; everyone else ignores it.
+    # True → the runner builds the model's own state signal (via
+    # build_state_signal) and passes it to reflect(). Only
+    # richer_reflexion_turnwise consumes it; everyone else ignores it.
     uses_state = False
 
     def __init__(self):
@@ -187,7 +200,7 @@ class ReflexionEpisodic(Architecture):
         temperature/max_tokens as the loop. Cost accumulates into ``stats`` —
         the cost axis has to include reflection overhead. Not an action step,
         so it never consumes MAX_STEPS_PER_TURN budget. ``state_diff`` is unused
-        by the base prompt; ``RicherReflexion`` folds it in via
+        by the base prompt; ``TurnwiseRicherReflexion`` folds it in via
         ``_reflection_prompt``. It is in the signature so the runner has one
         uniform call site across arms."""
         prompt = self._reflection_prompt(attempt_text, signal, state_diff)
@@ -222,7 +235,9 @@ class ReflexionEpisodic(Architecture):
             # rebuild path (log_to_messages → messages_to_text) nothing else
             # exercises, so the log must show what the reflector actually saw.
             prompt=prompt,
-            # None for plain reflexion; the capped diff for richer_reflexion.
+            # None for plain reflexion; the capped state timeline for
+            # richer_reflexion_turnwise. Field name kept as `state_diff` for
+            # continuity with the already-committed logs.
             state_diff=state_diff,
             input_tokens=usage.prompt_tokens if usage else None,
             output_tokens=usage.completion_tokens if usage else None,
@@ -233,8 +248,9 @@ class ReflexionEpisodic(Architecture):
     def _reflection_prompt(
         self, attempt_text: str | None, signal: str, state_diff: str | None
     ) -> str:
-        """The reflection call's prompt. Override point: ``RicherReflexion``
-        swaps in the state-bearing template. Base ignores ``state_diff``."""
+        """The reflection call's prompt. Override point:
+        ``TurnwiseRicherReflexion`` swaps in the state-bearing template. Base
+        ignores ``state_diff``."""
         return REFLECTION_PROMPT.format(attempt_text=attempt_text, signal=signal)
 
     def build_state_signal(
@@ -250,12 +266,8 @@ class ReflexionEpisodic(Architecture):
 class TurnwiseRicherReflexion(ReflexionEpisodic):
     """Own contribution. Identical to episodic Reflexion in every respect
     (k=3, fresh-episode, seeded attempt 1, same preamble) except the reflection
-    call also sees the model's own **per-turn timeline** (what each turn changed,
-    relative to the turn before) rather than one net diff against ``initial_config``.
-
-    ``turnwise − richer`` is a single-manipulation contrast. Both arms retry,
-    both reflect, both receive a state block, and the block degrades to the
-    same sentinel on the same tasks. Only the attribution differs.
+    call also sees the model's own **per-turn state timeline** — what each turn
+    changed, relative to the turn before (``state_timeline_string``).
     """
 
     name = "richer_reflexion_turnwise"

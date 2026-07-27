@@ -1,5 +1,5 @@
 baseline__old_prompt/
-logs/pretty_logs
+#logs/pretty_logs
 
 ### Python template
 # Byte-compiled / optimized / DLL files

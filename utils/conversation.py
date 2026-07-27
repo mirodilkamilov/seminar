@@ -100,7 +100,8 @@ def log_to_calls(log_path) -> list[list[list[str]]]:
     call strings) shape ``multi_turn_checker`` expects — the same object
     ``_run_fc_loop`` accumulates live as ``all_turns_calls``.
 
-    Used to re-grade the seeded attempt-1 failure in ``richer_reflexion``: the
+    Used to re-grade the seeded attempt-1 failure in
+    ``richer_reflexion_turnwise``: the
     runner skips ``grade()`` for a seeded attempt, so there are no ``_eval``
     simulator instances to dump. Rebuilding the baseline call list and grading
     it repopulates them (zero LLM cost) and reproduces the seed verdict.
