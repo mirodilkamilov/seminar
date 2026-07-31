@@ -6,8 +6,8 @@ Reflexion retries because an oracle (the grader) says it failed. The grader's
 raw output leaks the expected answer — the `details` dict carries
 `ground_truth_instance_state` / `missing_items` — so the reflection call and
 the retry preamble may only ever see *this* sanitized signal. Both arms
-(reflexion and blind_retry) receive the identical signal (REVIEW.md §3.2,
-design decision 2), so any value it adds cancels in the
+(reflexion and blind_retry) receive the identical signal, so any value it adds
+cancels in the
 Reflexion@3 − BlindRetry@3 subtraction.
 
 Granularity (locked): class + turn, never values, never which call was

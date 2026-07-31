@@ -1,8 +1,8 @@
 # Hand-coded lesson audit: `reflexion` vs `richer_reflexion_turnwise`
 
 Supporting evidence for the report's §5.2 (the audit table) and §5.3 (the two
-exemplars). Companion to REVIEW.md §3.2.6.2, which reports the quantitative null
-(+0.0pp, 7 v 7, p = 1.00).
+exemplars). The two arms score identically — a difference of +0.0pp, 7 wins to
+7, p = 1.00.
 
 The question the pass rate cannot answer: **when the two arms disagree on a
 task, is it because the state block changed what the model concluded, or because
@@ -109,8 +109,8 @@ Coding each `Lesson` as pushing toward acting, toward asking, or neither:
 | ask-more | 6 | 5 |
 | task-specific | 3 | 4 |
 
-The threshold shift measured in §3.2.6.2 (`miss_param` retries, 8.00 → 8.87 tool
-calls) **is not present in the first lesson**. It emerges over attempts, as
+The threshold shift reported in the report's §4.4 (`miss_param` retries,
+8.00 → 8.87 tool calls) **is not present in the first lesson**. It emerges over attempts, as
 diverging retries draw diverging signals and the append-only preamble stacks a
 second lesson on the first.
 
@@ -160,8 +160,8 @@ calls. It repeated the rule at attempt 2 and lost. **L: wrong.**
 
 ### 3.5 A hazard the diff does not remove: credential-shaped distractors
 
-REVIEW.md §3.2.4 hazard 3 showed that diffing against `initial_config` strips
-inert auth-shaped flags (28 → 4). It does. It does **not** strip credential
+Diffing against `initial_config` rather than dumping absolute state strips inert
+auth-shaped flags — measured over the subset, 28 such traps fall to 4. It does. It does **not** strip credential
 records the model's own actions legitimately changed, and those mislead just as
 effectively. Both of turnwise's credential misdiagnoses sit on tasks whose block
 contains a mutated `credit_card_list`:
@@ -193,8 +193,8 @@ needs **redaction** of credential-shaped values, not merely diffing.
 7 tasks turn on reflection content, splitting **3–4**. Net effect of reflection
 quality: **+1 to +2 tasks (+0.5 to +1.0pp)** — inside the measured CI of
 [−3.5, +3.5]pp. The coding and the pass rate agree, and the coding *explains* the
-null rather than restating it. It corroborates §3.2.5.1's borderline-pool
-account at task level: six of these flip regardless of what the reflection said.
+null rather than restating it. It corroborates the borderline-pool account at
+task level: six of these flip regardless of what the reflection said.
 
 ### 3.7 How the block was actually used
 
@@ -218,8 +218,8 @@ damning ones, because the block demonstrably held the answer:
   `Turn 3`, direct evidence the removal landed a turn late; the lesson diagnoses
   turn 7 instead.
 
-This sharpens §3.2.6.2's finding that 47.6% of state-block values are already
-verbatim in the transcript: the problem is not only redundancy, but that much of
+This sharpens the finding that 47.6% of state-block values are already verbatim
+in the transcript: the problem is not only redundancy, but that much of
 the non-redundant remainder is ignored when it matters. Salience was the
 hypothesis; salience is apparently not the binding constraint either.
 
@@ -302,7 +302,8 @@ The block showed `transaction_history = [{"type": "deposit", "amount": 5000, …
 confabulate a cause**, the most accurate reading reachable from a sanitized
 signal that cannot reveal a response-gate mismatch. Reflexion's attempt-2 lesson
 **flatly contradicts** its first (*"confirmation alone is not sufficient; action
-must follow"*). **Attribution: lesson.**
+must follow"*) — the append-only preamble stacks both, so the retry receives a
+self-contradicting pair. **Attribution: lesson.**
 
 **`miss_func_164`** — TravelAPI, 5 turns. Both arms give nearly the same
 diagnosis (*"never explored connecting flights"*) and nearly the same attempt-2

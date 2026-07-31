@@ -4,7 +4,7 @@ plain text.
 
 Both feed Reflexion's reflection call: a live attempt hands over its final
 message list directly, while a *seeded* attempt 1 (reused from the baseline
-run — REVIEW.md §3.2) is first reconstructed from its log with
+run) is first reconstructed from its log with
 `log_to_messages`. Either way the reflection sees the same canonical
 `messages_to_text` rendering, so reflection inputs are identical in form
 across attempts.

@@ -114,7 +114,7 @@ def state_timeline_string(
     ``multi_turn_checker`` returns at the first failing turn, its cut point was
     decided by the ground-truth comparison, silently carrying turn-localization
     that ``utils.sanitize`` deliberately withholds for state-gate failures and
-    that no control arm received. That build is discarded — REVIEW.md §3.2.6.1.
+    that no control arm received. That build was discarded.
 
     Turns that changed nothing are listed as such rather than omitted: "turn 3
     persisted nothing" is exactly the under-acting signal, and dropping those
