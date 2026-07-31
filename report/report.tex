@@ -393,15 +393,18 @@ Reflexion+State    & \quad + the agent's own state timeline    & 100 \\
 \end{table}
 The one large effect is the retry itself: Sham reaches 103 against the 85
 every arm shares at @1 (first-attempt --- seeded from Baseline), a gain of
-$\mathbf{+9.0}$~pp (18 wins, 0 losses, $p<10^{-4}$). After that, nothing moves.
+$\mathbf{+9.0}$~pp (18 wins, 0 losses, $p<10^{-4}$) --- necessarily one-sided,
+since a retry fires only on a failure and inherits every pass. After that,
+nothing moves.
 
 \begin{itemize}\itemsep2pt
 \item \textbf{Real reflection loses to the sham.} Reflexion $-$ Sham is
   $\mathbf{-1.5}$~pp, CI $[-5.5,+2.5]$, 6 wins to 9 losses, $p=0.607$.
 \item \textbf{The sham's advice is inert.} Sham $-$ Sham-lite is $+0.5$~pp
-  (2 to 1, $p=1.00$), with three of four categories identical task-for-task. So
-  the 4.4~pp the sham arms gain over a plain re-run belongs to the retry
-  framing and the sanitised signal, not to advice.
+    (2 to 1, $p=1.00$), with three of four categories identical task-for-task. The
+    sham arms flip 12.2\% of failures on the first retry against 7.8\% for a plain
+    re-run, so that 4.4~pp belongs to the retry framing and the sanitised signal,
+    not to advice.
 \item \textbf{The richer signal changes nothing.} Reflexion+State $-$ Reflexion
   is $\mathbf{+0.0}$~pp, CI $[-3.5,+3.5]$, 7 to 7, $p=1.00$.
 \end{itemize}
@@ -472,7 +475,7 @@ The retry arms cost about $2.1\times$ the Baseline's input tokens (29.5M against
 and that multiple is almost entirely the extra attempts. Within Reflexion the reflection
 mechanism accounts for roughly 5\% of the tokens --- 2\% to generate the lessons, and about
 3\% more to carry them, since a lesson sits in the retry's opening message and is re-sent with
-every call in that attempt. The state timelines adds a further 0.1\%. So the expensive
+every call in that attempt. The state timeline adds a further 0.1\%. So the expensive
 component of Reflexion is the retry, which worked, and the cheap component is the reflection, which did not.
 
 \section{Why the richer signal did not help}
@@ -480,10 +483,10 @@ component of Reflexion is the retry, which worked, and the cheap component is th
 
 \subsection{It changed salience, not information}
 
-The state timelines is largely something the agent already had. Across all 175 real
+The state timeline is largely something the agent already had. Across all 175 real
 timelines (654 attribute lines), \textbf{47.6\% of the values appear verbatim in
 the transcript the reflection step is already reading}, and most of the rest is
-derivable from tool results in that same transcript. The timeline blocks restructures and
+derivable from tool results in that same transcript. The timeline block restructures and
 aggregates; it does not inform. This is a lexical test and should be read as
 one, but it sets the scope of the null: what remains untested is a signal
 genuinely \emph{new} to the agent, such as an external validator or an
@@ -500,13 +503,14 @@ whether following the \emph{lesson} would help (Table~\ref{tab:audit}).
 The two arms are level, with Reflexion if anything marginally ahead on diagnosis.
 The block changed the conclusion on 6 of the 14 tasks, but symmetrically ---
 improving the diagnosis twice and degrading it twice --- and it went unused
-about as often as it helped: in \texttt{base\_94} it lists the exact cause of
-the state mismatch while the lesson blames tyre pressure instead.
+about as often as it helped: in \texttt{base\_94} the agent released a parking
+brake the ground truth left engaged, and the block lists that exact change while
+the lesson blames tyre pressure instead.
 
 \begin{table}[t]
 \centering\footnotesize
-\caption{Hand-coded quality of the 14 discordant attempt-1 reflection pairs. The
-arms are within one task of each other in every bucket.}
+\caption{Hand-coded quality of the 14 discordant attempt-1 reflection pairs. No
+bucket differs by more than two tasks.}
 \label{tab:audit}
 \begin{tabular}{@{}lccc c ccc@{}}
 \toprule
@@ -533,19 +537,19 @@ prescribed ``write only the raw number (e.g.\ \texttt{2.0})''. It passed. Note
 what the block contributed: not understanding, which both arms had, but a
 concrete anchor that stopped the fix drifting into invention.
 
-\textbf{Where it backfired.} Reflexion diagnosed the failure exactly right ---
-the user had not yet given the travel date or class, so the agent should have asked.
-Reflexion+State did not. Its state block showed that its own booking attempt
+\textbf{Where it backfired.} In \texttt{miss\_param\_169} Reflexion diagnosed the
+failure exactly right --- the user had not yet given the travel date or class, so
+the agent should have asked. Reflexion+State did not. Its state block showed that its own booking attempt
 had changed a credit-card record, and it concluded that ``the system required
 \texttt{client\_id}, \texttt{client\_secret}, and other authentication details''.
 Those parameters are real. They belong to \texttt{authenticate\_travel}, one of the 27 tools the agent held.
 But booking does not need them --- only the \texttt{access\_token} the user had already supplied.
-So the block did not make the model invent a requirement. It prioritised wrong tool,
+So the block did not make the model invent a requirement. It prioritised the wrong tool,
 and the lesson sent the retry hunting for credentials instead of asking for the missing details.
 Same mechanism, opposite directions --- that is what a $+0.0$~pp result is made of.
 
 \section{Limitations}
-\enlargethispage{2\baselineskip}
+\enlargethispage{3\baselineskip}
 
 \textbf{One model.} All results are specific to
 \texttt{qwen3-next-80b-a3b-instruct}; the ReAct saturation finding in particular
@@ -582,18 +586,17 @@ rather than reasoning (Section~\ref{sec:noise}).
 \section{Conclusion}
 
 On this benchmark and this model, \emph{where} reflection sits in the loop
-proved less informative than \emph{what it is told} --- and even a substantially
-richer input did not change how many failures were recovered, only which ones.
-The number is capped by a small pool of borderline tasks that any retry can
-reach, while reflection's observable effect is to shift the agent's threshold
-for acting versus asking, helping in one category as much as it hurts in
-another.
+proved less informative than \emph{what it is told}: even a substantially richer
+input did not change how many failures were recovered, only which ones. The
+number is capped by a small pool of borderline tasks any retry can reach, and
+reflection's observable effect is to shift the agent's act/ask threshold,
+helping in one category as much as it hurts in another.
 
 The methodological lesson generalises: when the system under test is not
 reproducible and re-attempting is part of the architecture, an uninformative
 control arm is necessary rather than optional. Measured against its own first attempt,
-Reflexion gains $7.5$~pp at $p<10^{-4}$. Measured against a sham that says nothing,
-it gains nothing. Both describe the same arm; only the second controls for re-attempting.
+Reflexion gains $7.5$~pp at $p<10^{-4}$. Measured against a sham that says
+nothing, it gains nothing. Only the second comparison controls for re-attempting.
 
 \bibliographystyle{abbrv}
 \bibliography{references}
