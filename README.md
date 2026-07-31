@@ -92,7 +92,6 @@ results row to `results/{arch}/{category}.jsonl`, and regenerates
 architectures/    one file per condition, all subclass a shared FC loop
 utils/            retry, schema, executor, sanitize, state_dump,
                   conversation, logging, config
-analysis/         one-off probes; each prints its own numbers
 run_benchmark.py  runs a condition over the frozen subset and grades it
 task_subset.json  the frozen 200-task subset, shared by every condition
 results/          per-task grading + cost, plus the summary CSVs
@@ -114,3 +113,9 @@ gorilla/          cloned BFCL repo at tag v1.3 (third-party, do not edit)
 - **Grading** is `multi_turn_checker` AND `multi_turn_irrelevance_checker`. The
   second is what scores the abstention categories, and omitting it inflates
   `miss_param` and `miss_func`.
+
+## AI assistance disclosure
+
+I used Claude (Anthropic) throughout this project: to set up the benchmark
+evaluation, to clarify and iterate on my thinking, to discuss the results, and
+to review my work. I am solely responsible for any mistakes that remain.
